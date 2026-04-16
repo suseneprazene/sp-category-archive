@@ -152,7 +152,12 @@
 
     selects.forEach(function (sel)
     {
-      selected[sel.dataset.attribute] = sel.value;
+      const key = sel.dataset.attribute;
+      // Prefer non-empty: don't let the untouched duplicate (mobile/desktop) overwrite a real selection
+      if ( ! (key in selected) || sel.value !== '' )
+      {
+        selected[key] = sel.value;
+      }
     });
 
     const allChosen = Object.values(selected).every(function (v) { return v !== ''; });
@@ -367,7 +372,12 @@
 
       selects.forEach(function (sel)
       {
-        selected[sel.dataset.attribute] = sel.value;
+        const key = sel.dataset.attribute;
+        // Prefer non-empty: don't let the untouched duplicate panel overwrite a real selection
+        if ( ! (key in selected) || sel.value !== '' )
+        {
+          selected[key] = sel.value;
+        }
       });
 
       const allChosen = Object.values(selected).every(function (v) { return v !== ''; });
@@ -387,11 +397,19 @@
       const inlinePrice = item.querySelector('.sp-inline-price');
       if (inlinePrice) inlinePrice.innerHTML = match.price_html;
 
+      // Mobilní cena
+      const mobilePrice = item.querySelector('.sp-mobile-price');
+      if (mobilePrice) mobilePrice.innerHTML = match.price_html;
+
       // Obrázek v pravém panelu (jen pokud je item open)
       if (item.classList.contains('open'))
       {
         switchImage(match.image);
       }
+
+      // Mobilní obrázek (vždy viditelný na mobilu)
+      const mobileImg = item.querySelector('.sp-mobile-img');
+      if (mobileImg && match.image) mobileImg.src = match.image;
     });
 
   });

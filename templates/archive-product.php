@@ -46,7 +46,8 @@ $products = wc_get_products([
         $price_html  = $product->get_price_html();
 
         // Varianty – připravíme data pro JS
-        $variations_data = [];
+        $variations_data  = [];
+        $attr_option_price = []; // [ 'attribute_hmotnost' => [ '50g' => '100,00 Kč', ... ] ]
         if ( $is_variable )
         {
             $available_variations = $product->get_available_variations();
@@ -67,44 +68,30 @@ $products = wc_get_products([
                     $var_attrs[ $normalized_key ] = stripslashes( trim( $attr_val, '"' ) );
                 }
 
+                $var_price_html = $var_obj ? $var_obj->get_price_html() : $price_html;
+
                 $variations_data[] = [
                     'id'         => $variation['variation_id'],
-                    'price_html' => $var_obj ? $var_obj->get_price_html() : $price_html,
+                    'price_html' => $var_price_html,
                     'image'      => $var_image,
                     'attributes' => $var_attrs,
                     'in_stock'   => $var_obj ? $var_obj->is_in_stock() : false,
                 ];
+
+                // Build option-price lookup (plain text, first match wins)
+                foreach ( $var_attrs as $nkey => $nval )
+                {
+                    if ( $nval !== '' && ! isset( $attr_option_price[ $nkey ][ $nval ] ) )
+                    {
+                        $attr_option_price[ $nkey ][ $nval ] = strip_tags( $var_price_html );
+                    }
+                }
             }
         }
 
         $active_class = ( $index === 0 ) ? ' active' : '';
 
-        // Jméno pro zobrazení – pro variabilní produkty přidáme hodnoty atributů první varianty
         $display_name = $name;
-        if ( $is_variable && ! empty( $variations_data ) )
-        {
-            $first_attrs = $variations_data[0]['attributes']; // e.g. ['attribute_hmotnost' => '50g']
-            $attr_vals   = [];
-            foreach ( $first_attrs as $attr_key => $attr_val )
-            {
-                if ( $attr_val === '' ) continue;
-                // Rekonstruuj název taxonomie (attribute_hmotnost → pa_hmotnost)
-                $tax_name = 'pa_' . preg_replace( '/^attribute_/', '', $attr_key );
-                if ( taxonomy_exists( $tax_name ) )
-                {
-                    $term        = get_term_by( 'slug', $attr_val, $tax_name );
-                    $attr_vals[] = $term ? $term->name : $attr_val;
-                }
-                else
-                {
-                    $attr_vals[] = $attr_val;
-                }
-            }
-            if ( ! empty( $attr_vals ) )
-            {
-                $display_name = $name . ' - ' . implode( ', ', $attr_vals );
-            }
-        }
 
       ?>
 
@@ -146,9 +133,13 @@ $products = wc_get_products([
                     data-attribute="<?php echo esc_attr( $attr_key_normalized ); ?>"
                   >
                     <option value="">— Vyberte —</option>
-<?php foreach ( $options as $option ) : ?>
-  <option value="<?php echo esc_attr( trim( $option, '"' ) ); ?>">
-    <?php echo esc_html( trim( $option, '"' ) ); ?>
+<?php foreach ( $options as $option ) :
+  $opt_val   = trim( $option, '"' );
+  $opt_price = $attr_option_price[ $attr_key_normalized ][ $opt_val ] ?? '';
+  $opt_label = $opt_val . ( $opt_price !== '' ? ' – ' . $opt_price : '' );
+?>
+  <option value="<?php echo esc_attr( $opt_val ); ?>">
+    <?php echo esc_html( $opt_label ); ?>
   </option>
 <?php endforeach; ?>
                   </select>
@@ -186,7 +177,7 @@ $products = wc_get_products([
             alt="<?php echo esc_attr( $name ); ?>"
           />
 
-          <div class="sp-mobile-price"><?php echo $price_html; ?></div>
+          <div class="sp-mobile-price"><?php if ( ! $is_variable ) echo $price_html; ?></div>
 
           <?php if ( $is_variable ) : ?>
             <div class="sp-variation-selects">
@@ -199,13 +190,17 @@ $products = wc_get_products([
                 <div class="sp-variation-row">
                   <label><?php echo esc_html( $label ); ?></label>
                   <select
-                    class="sp-variation-select"
+                    class="sp-inline-variation-select"
                     data-attribute="<?php echo esc_attr( $attr_key_normalized ); ?>"
                   >
                     <option value="">— Vyberte —</option>
-<?php foreach ( $options as $option ) : ?>
-  <option value="<?php echo esc_attr( trim( $option, '"' ) ); ?>">
-    <?php echo esc_html( trim( $option, '"' ) ); ?>
+<?php foreach ( $options as $option ) :
+  $opt_val   = trim( $option, '"' );
+  $opt_price = $attr_option_price[ $attr_key_normalized ][ $opt_val ] ?? '';
+  $opt_label = $opt_val . ( $opt_price !== '' ? ' – ' . $opt_price : '' );
+?>
+  <option value="<?php echo esc_attr( $opt_val ); ?>">
+    <?php echo esc_html( $opt_label ); ?>
   </option>
 <?php endforeach; ?>
                   </select>
@@ -215,12 +210,12 @@ $products = wc_get_products([
           <?php endif; ?>
 
           <div class="sp-qty-row">
-            <input type="number" class="sp-qty" value="1" min="1" />
+            <input type="number" class="sp-qty sp-inline-qty" value="1" min="1" />
           </div>
 
           <div class="sp-action-row">
             <button
-              class="sp-add-to-cart custom-product-btn"
+              class="sp-add-to-cart custom-product-btn sp-inline-cart-btn"
               data-product-id="<?php echo esc_attr( $product_id ); ?>"
             >
               DO KOŠÍKU
