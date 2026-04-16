@@ -215,9 +215,19 @@
 
 /* #fb-modal je vykreslen přes do_shortcode(); wp_kses_post může odstranit
    inline style="display:none" – toto pravidlo zajistí, že je modal skryt
-   dokud JS nenastaví modal.style.display = 'block' (inline override). */
+   dokud JS nenastaví modal.style.display = 'block' (inline override).
+   Pozicování: pevně vycentrováno v průhledu bez ohledu na scroll stránky. */
 #fb-modal {
   display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 9999;
+  max-width: min(90vw, 640px);
+  max-height: 85vh;
+  overflow-y: auto;
+  background: #fff;
 }
 
 /* Backdrop pro fb-modal quick-view (vložen JS pluginu) */

@@ -199,7 +199,7 @@ $products = wc_get_products([
                 <div class="sp-variation-row">
                   <label><?php echo esc_html( $label ); ?></label>
                   <select
-                    class="sp-variation-select"
+                    class="sp-inline-variation-select"
                     data-attribute="<?php echo esc_attr( $attr_key_normalized ); ?>"
                   >
                     <option value="">— Vyberte —</option>
@@ -215,12 +215,12 @@ $products = wc_get_products([
           <?php endif; ?>
 
           <div class="sp-qty-row">
-            <input type="number" class="sp-qty" value="1" min="1" />
+            <input type="number" class="sp-qty sp-inline-qty" value="1" min="1" />
           </div>
 
           <div class="sp-action-row">
             <button
-              class="sp-add-to-cart custom-product-btn"
+              class="sp-add-to-cart custom-product-btn sp-inline-cart-btn"
               data-product-id="<?php echo esc_attr( $product_id ); ?>"
             >
               DO KOŠÍKU

@@ -387,11 +387,19 @@
       const inlinePrice = item.querySelector('.sp-inline-price');
       if (inlinePrice) inlinePrice.innerHTML = match.price_html;
 
+      // Mobilní cena
+      const mobilePrice = item.querySelector('.sp-mobile-price');
+      if (mobilePrice) mobilePrice.innerHTML = match.price_html;
+
       // Obrázek v pravém panelu (jen pokud je item open)
       if (item.classList.contains('open'))
       {
         switchImage(match.image);
       }
+
+      // Mobilní obrázek (vždy viditelný na mobilu)
+      const mobileImg = item.querySelector('.sp-mobile-img');
+      if (mobileImg && match.image) mobileImg.src = match.image;
     });
 
   });
