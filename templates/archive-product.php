@@ -159,9 +159,7 @@ $products = wc_get_products([
 
           <div class="sp-inline-bottom-row">
             <div class="sp-inline-price" id="sp-inline-price-<?php echo esc_attr( $product_id ); ?>">
-              <?php if ( ! $is_variable ) : ?>
-                <?php echo $price_html; ?>
-              <?php endif; ?>
+              <?php echo $price_html; ?>
             </div>
             <input type="number" class="sp-qty sp-inline-qty" value="1" min="1" />
             <button
