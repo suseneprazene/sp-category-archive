@@ -96,7 +96,7 @@ $products = wc_get_products([
         <h3><?php echo esc_html( $name ); ?></h3>
 
         <?php if ( $short_desc ) : ?>
-          <div class="sp-product-desc"><?php echo wp_kses_post( $short_desc ); ?></div>
+          <div class="sp-product-desc"><?php echo wp_kses_post( do_shortcode( $short_desc ) ); ?></div>
         <?php endif; ?>
 
         <!-- Inline akce – desktop -->
