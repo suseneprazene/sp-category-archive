@@ -91,32 +91,7 @@ $products = wc_get_products([
 
         $active_class = ( $index === 0 ) ? ' active' : '';
 
-        // Jméno pro zobrazení – pro variabilní produkty přidáme hodnoty atributů první varianty
         $display_name = $name;
-        if ( $is_variable && ! empty( $variations_data ) )
-        {
-            $first_attrs = $variations_data[0]['attributes']; // e.g. ['attribute_hmotnost' => '50g']
-            $attr_vals   = [];
-            foreach ( $first_attrs as $attr_key => $attr_val )
-            {
-                if ( $attr_val === '' ) continue;
-                // Rekonstruuj název taxonomie (attribute_hmotnost → pa_hmotnost)
-                $tax_name = 'pa_' . preg_replace( '/^attribute_/', '', $attr_key );
-                if ( taxonomy_exists( $tax_name ) )
-                {
-                    $term        = get_term_by( 'slug', $attr_val, $tax_name );
-                    $attr_vals[] = $term ? $term->name : $attr_val;
-                }
-                else
-                {
-                    $attr_vals[] = $attr_val;
-                }
-            }
-            if ( ! empty( $attr_vals ) )
-            {
-                $display_name = $name . ' - ' . implode( ', ', $attr_vals );
-            }
-        }
 
       ?>
 
