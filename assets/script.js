@@ -152,7 +152,12 @@
 
     selects.forEach(function (sel)
     {
-      selected[sel.dataset.attribute] = sel.value;
+      const key = sel.dataset.attribute;
+      // Prefer non-empty: don't let the untouched duplicate (mobile/desktop) overwrite a real selection
+      if ( ! (key in selected) || sel.value !== '' )
+      {
+        selected[key] = sel.value;
+      }
     });
 
     const allChosen = Object.values(selected).every(function (v) { return v !== ''; });
@@ -367,7 +372,12 @@
 
       selects.forEach(function (sel)
       {
-        selected[sel.dataset.attribute] = sel.value;
+        const key = sel.dataset.attribute;
+        // Prefer non-empty: don't let the untouched duplicate panel overwrite a real selection
+        if ( ! (key in selected) || sel.value !== '' )
+        {
+          selected[key] = sel.value;
+        }
       });
 
       const allChosen = Object.values(selected).every(function (v) { return v !== ''; });
