@@ -1,0 +1,251 @@
+/* ── Outer wrapper ── */
+.sp-archive-outer {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+
+.sp-archive-wrapper {
+  display: flex;
+  gap: 48px;
+  align-items: flex-start;
+}
+
+/* ── Levý sloupec ── */
+.sp-product-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.sp-product-item {
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+  border-bottom: 1px solid #e0e0e0;
+  transition: padding-left 0.2s ease;
+}
+
+.sp-product-item:first-child {
+  border-top: 1px solid #e0e0e0;
+}
+
+.sp-product-item h3 {
+  margin: 8px 0 4px;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* Popis – skrytý, rozbalí se třídou .open */
+.sp-product-desc {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.35s ease, opacity 0.3s ease, margin-top 0.3s ease;
+  margin-top: 0;
+}
+
+.sp-product-item.open .sp-product-desc {
+  max-height: 200px;
+  opacity: 1;
+  margin-top: 6px;
+}
+
+/* Inline akce – skryté, rozbalí se třídou .open */
+.sp-inline-actions {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.35s ease, opacity 0.3s ease, margin-top 0.3s ease;
+  margin-top: 0;
+}
+
+.sp-product-item.open .sp-inline-actions {
+  max-height: 300px;
+  opacity: 1;
+  margin-top: 8px;
+}
+
+/* Na mobilu inline akce schováme */
+@media (max-width: 768px) {
+  .sp-inline-actions {
+    display: none;
+  }
+}
+
+/* Mobilní panel – na desktopu skrytý */
+.sp-mobile-panel {
+  display: none;
+}
+
+/* ── Pravý sloupec – jen obrázek ── */
+.sp-product-panel {
+  width: 420px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 40px;
+}
+
+.sp-image-frame {
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  border-radius: 6px;
+  border: 1px solid #111;
+  box-shadow: 4px 4px 0px 0px #111;
+}
+
+.sp-image-frame img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Flash efekt */
+.sp-projector-flash {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 10;
+  transition: opacity 0.08s ease;
+}
+
+.sp-projector-flash.flash-on {
+  opacity: 1;
+}
+
+/* Množství */
+.sp-qty {
+  width: 64px;
+  padding: 6px 8px;
+  border: 1px solid #111;
+  border-radius: 4px;
+  font-size: 1rem;
+  text-align: center;
+}
+
+.sp-detail-btn {
+  font-size: 0.85rem;
+  text-decoration: underline;
+  color: #111;
+}
+
+/* Inline bottom row */
+.sp-inline-bottom-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.sp-inline-bottom-row .sp-qty {
+  width: 64px;
+}
+
+/* Inline cena */
+.sp-inline-price {
+  font-size: 1rem;
+  font-weight: 600;
+  min-width: 80px;
+}
+
+.sp-variation-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sp-variation-row label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.sp-variation-row select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #111;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+/* ── MOBIL ── */
+@media (max-width: 768px) {
+  .sp-archive-outer {
+    padding: 24px 16px;
+  }
+
+  .sp-archive-wrapper {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .sp-product-panel {
+    display: none;
+  }
+
+  .sp-product-item {
+    cursor: default;
+    padding: 16px 0;
+  }
+
+  .sp-product-desc {
+    max-height: none;
+    overflow: visible;
+    opacity: 1;
+    margin-top: 6px;
+  }
+
+  .sp-mobile-panel {
+    display: block;
+    margin-top: 12px;
+  }
+
+  .sp-mobile-img {
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+    border: 1px solid #111;
+    box-shadow: 4px 4px 0px 0px #111;
+    margin-bottom: 12px;
+  }
+
+  .sp-mobile-price {
+    font-size: 1.1rem;
+    margin-bottom: 10px;
+  }
+
+  .sp-variation-selects {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .sp-variation-row select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #111;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 0.95rem;
+  }
+
+  .sp-qty-row {
+    margin-bottom: 10px;
+  }
+
+  .sp-action-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+}
