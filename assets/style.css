@@ -176,7 +176,64 @@
   cursor: pointer;
 }
 
-/* ── MOBIL ── */
+/* ── Bundle preview v archivu ── */
+
+/* Zvětšení max-height pro popis obsahující bundle náhled; povolíme scroll */
+.sp-product-item.has-bundle.open .sp-product-desc {
+  max-height: 600px;
+  overflow: auto;
+}
+
+/* Horizontální řada s malými náhledy */
+.sp-product-desc .fb-bundle-preview {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  gap: 8px !important;
+  overflow-x: auto;
+}
+
+.sp-product-desc .fb-preview-item {
+  width: 80px !important;
+  flex-shrink: 0;
+  margin-bottom: 0 !important;
+  text-align: center;
+}
+
+.sp-product-desc .fb-preview-item img {
+  width: 80px !important;
+  height: 80px !important;
+  object-fit: cover;
+  display: block;
+}
+
+.sp-product-desc .fb-preview-item p {
+  font-size: 11px !important;
+  margin: 4px 0 0 !important;
+  line-height: 1.2;
+}
+
+/* #fb-modal je vykreslen přes do_shortcode(); wp_kses_post může odstranit
+   inline style="display:none" – toto pravidlo zajistí, že je modal skryt
+   dokud JS nenastaví modal.style.display = 'block' (inline override). */
+#fb-modal {
+  display: none;
+}
+
+/* Backdrop pro fb-modal quick-view (vložen JS pluginu) */
+#sp-fb-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 9998;
+}
+
+#sp-fb-backdrop.sp-fb-backdrop-active {
+  display: block;
+}
+
+/* ── Mobil ── */
 @media (max-width: 768px) {
   .sp-archive-outer {
     padding: 24px 16px;

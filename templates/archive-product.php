@@ -79,6 +79,33 @@ $products = wc_get_products([
 
         $active_class = ( $index === 0 ) ? ' active' : '';
 
+        // Jméno pro zobrazení – pro variabilní produkty přidáme hodnoty atributů první varianty
+        $display_name = $name;
+        if ( $is_variable && ! empty( $variations_data ) )
+        {
+            $first_attrs = $variations_data[0]['attributes']; // e.g. ['attribute_hmotnost' => '50g']
+            $attr_vals   = [];
+            foreach ( $first_attrs as $attr_key => $attr_val )
+            {
+                if ( $attr_val === '' ) continue;
+                // Rekonstruuj název taxonomie (attribute_hmotnost → pa_hmotnost)
+                $tax_name = 'pa_' . preg_replace( '/^attribute_/', '', $attr_key );
+                if ( taxonomy_exists( $tax_name ) )
+                {
+                    $term        = get_term_by( 'slug', $attr_val, $tax_name );
+                    $attr_vals[] = $term ? $term->name : $attr_val;
+                }
+                else
+                {
+                    $attr_vals[] = $attr_val;
+                }
+            }
+            if ( ! empty( $attr_vals ) )
+            {
+                $display_name = $name . ' - ' . implode( ', ', $attr_vals );
+            }
+        }
+
       ?>
 
       <div
@@ -93,10 +120,10 @@ $products = wc_get_products([
         data-variations="<?php echo esc_attr( wp_json_encode( $variations_data ) ); ?>"
       >
 
-        <h3><?php echo esc_html( $name ); ?></h3>
+        <h3><?php echo esc_html( $display_name ); ?></h3>
 
         <?php if ( $short_desc ) : ?>
-          <div class="sp-product-desc"><?php echo wp_kses_post( $short_desc ); ?></div>
+          <div class="sp-product-desc"><?php echo wp_kses_post( do_shortcode( $short_desc ) ); ?></div>
         <?php endif; ?>
 
         <!-- Inline akce – desktop -->

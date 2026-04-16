@@ -182,6 +182,111 @@
     const items = document.querySelectorAll('.sp-product-item');
     if ( ! items.length ) return;
 
+    // Přidej třídu has-bundle pro produkty s bundle náhledem
+    items.forEach(function (item)
+    {
+      if (item.querySelector('.fb-bundle-preview'))
+      {
+        item.classList.add('has-bundle');
+      }
+    });
+
+    // Backdrop pro fb-modal (bundle quick-view)
+    var fbModal = document.getElementById('fb-modal');
+    if (fbModal)
+    {
+      var fbBackdrop = document.createElement('div');
+      fbBackdrop.id = 'sp-fb-backdrop';
+      document.body.appendChild(fbBackdrop);
+
+      var fbObserver = new MutationObserver(function ()
+      {
+        fbBackdrop.classList.toggle('sp-fb-backdrop-active', fbModal.style.display === 'block');
+      });
+      fbObserver.observe(fbModal, { attributes: true, attributeFilter: ['style'] });
+
+      fbBackdrop.addEventListener('click', function ()
+      {
+        fbModal.style.display = 'none';
+      });
+
+      // ── Oprava šipek navigace a názvu varianty v modálu ─────────────────
+      // fb-quick-view.js zpracuje zobrazení modálu; my sledujeme aktuální
+      // pozici a doplníme název varianty do <h2> po každém načtení obsahu.
+
+      var spFbContainer    = null;
+      var spFbCurrentIndex = 0;
+      var spFbTotalItems   = 0;
+      var spFbItemName     = '';
+
+      function spFbGetNameFromContainer(container, index)
+      {
+        if ( ! container) return '';
+        var items = container.querySelectorAll('.fb-preview-item');
+        var found = Array.prototype.find.call(items, function (item)
+        {
+          return parseInt(item.dataset.index, 10) === index;
+        });
+        if ( ! found) return '';
+        var p = found.querySelector('p');
+        return p ? p.textContent.trim() : '';
+      }
+
+      function spFbUpdateArrows()
+      {
+        var prevBtn = document.getElementById('fb-modal-prev');
+        var nextBtn = document.getElementById('fb-modal-next');
+        if (prevBtn) prevBtn.style.display = spFbCurrentIndex > 0 ? 'block' : 'none';
+        if (nextBtn) nextBtn.style.display = spFbCurrentIndex < spFbTotalItems - 1 ? 'block' : 'none';
+
+        // Přepíšeme název v <h2> správným názvem varianty.
+        // Guard: nastavíme jen pokud se text liší – jinak by mutace textu
+        // znovu spustila tento observer a vznikla by nekonečná smyčka.
+        if (spFbItemName && fbModalContent)
+        {
+          var h2 = fbModalContent.querySelector('h2');
+          if (h2 && h2.textContent !== spFbItemName) h2.textContent = spFbItemName;
+        }
+      }
+
+      // Klik na položku preview – zaznamenej kontejner, index a název
+      document.addEventListener('click', function (e)
+      {
+        var previewItem = e.target.closest('.fb-preview-item');
+        if (previewItem)
+        {
+          spFbContainer    = previewItem.closest('.fb-bundle-preview');
+          spFbCurrentIndex = parseInt(previewItem.dataset.index, 10);
+          if (isNaN(spFbCurrentIndex)) spFbCurrentIndex = 0;
+          spFbTotalItems   = spFbContainer ? spFbContainer.querySelectorAll('.fb-preview-item').length : 0;
+          var nameEl       = previewItem.querySelector('p');
+          spFbItemName     = nameEl ? nameEl.textContent.trim() : '';
+        }
+
+        // Šipka zpět
+        if (e.target.closest('#fb-modal-prev'))
+        {
+          spFbCurrentIndex = Math.max(0, spFbCurrentIndex - 1);
+          spFbItemName     = spFbGetNameFromContainer(spFbContainer, spFbCurrentIndex);
+        }
+
+        // Šipka vpřed
+        if (e.target.closest('#fb-modal-next'))
+        {
+          spFbCurrentIndex = Math.min(spFbTotalItems - 1, spFbCurrentIndex + 1);
+          spFbItemName     = spFbGetNameFromContainer(spFbContainer, spFbCurrentIndex);
+        }
+      });
+
+      // Po načtení obsahu modálu (AJAX hotový) oprav šipky a název
+      var fbModalContent = document.getElementById('fb-modal-content');
+      if (fbModalContent)
+      {
+        new MutationObserver(spFbUpdateArrows)
+          .observe(fbModalContent, { childList: true, subtree: true });
+      }
+    }
+
     // První produkt – otevřít a přepnout obrázek
     if ( ! isTouchDevice() )
     {
@@ -199,7 +304,9 @@
           e.target.closest('.sp-inline-cart-btn') ||
           e.target.closest('.sp-detail-btn')      ||
           e.target.closest('select')              ||
-          e.target.closest('input')
+          e.target.closest('input')               ||
+          e.target.closest('.fb-bundle-preview')  ||
+          e.target.closest('#fb-modal')
         ) return;
 
         if (isTouchDevice()) return;
