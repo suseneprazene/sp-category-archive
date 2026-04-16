@@ -183,6 +183,34 @@
   max-height: 600px;
 }
 
+/* Horizontální řada s malými náhledy */
+.sp-product-desc .fb-bundle-preview {
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  gap: 8px !important;
+  overflow-x: auto;
+}
+
+.sp-product-desc .fb-preview-item {
+  width: 80px !important;
+  flex-shrink: 0;
+  margin-bottom: 0 !important;
+  text-align: center;
+}
+
+.sp-product-desc .fb-preview-item img {
+  width: 80px !important;
+  height: 80px !important;
+  object-fit: cover;
+  display: block;
+}
+
+.sp-product-desc .fb-preview-item p {
+  font-size: 11px !important;
+  margin: 4px 0 0 !important;
+  line-height: 1.2;
+}
+
 /* Backdrop pro fb-modal quick-view (vložen JS pluginu) */
 #sp-fb-backdrop {
   display: none;

@@ -209,6 +209,54 @@
       {
         fbModal.style.display = 'none';
       });
+
+      // ── Oprava šipek navigace (prev/next) ────────────────────────────────
+      // fb-quick-view.js může mít starší verzi; sledujeme pozici sami a
+      // aktualizujeme viditelnost šipek po každém načtení obsahu modálu.
+
+      var spFbCurrentIndex = 0;
+      var spFbTotalItems   = 0;
+
+      function spFbUpdateArrows()
+      {
+        var prevBtn = document.getElementById('fb-modal-prev');
+        var nextBtn = document.getElementById('fb-modal-next');
+        if (prevBtn) prevBtn.style.display = spFbCurrentIndex > 0 ? 'block' : 'none';
+        if (nextBtn) nextBtn.style.display = spFbCurrentIndex < spFbTotalItems - 1 ? 'block' : 'none';
+      }
+
+      // Klik na položku preview – zaznamenej index a celkový počet
+      document.addEventListener('click', function (e)
+      {
+        var previewItem = e.target.closest('.fb-preview-item');
+        if (previewItem)
+        {
+          spFbCurrentIndex = parseInt(previewItem.dataset.index, 10);
+          if (isNaN(spFbCurrentIndex)) spFbCurrentIndex = 0;
+          var container    = previewItem.closest('.fb-bundle-preview');
+          spFbTotalItems   = container ? container.querySelectorAll('.fb-preview-item').length : 0;
+        }
+
+        // Šipka zpět – snížíme index
+        if (e.target.closest('#fb-modal-prev'))
+        {
+          spFbCurrentIndex = Math.max(0, spFbCurrentIndex - 1);
+        }
+
+        // Šipka vpřed – zvýšíme index
+        if (e.target.closest('#fb-modal-next'))
+        {
+          spFbCurrentIndex = Math.min(spFbTotalItems - 1, spFbCurrentIndex + 1);
+        }
+      });
+
+      // Po načtení obsahu modálu (AJAX hotový) oprav šipky
+      var fbModalContent = document.getElementById('fb-modal-content');
+      if (fbModalContent)
+      {
+        new MutationObserver(spFbUpdateArrows)
+          .observe(fbModalContent, { childList: true, subtree: true });
+      }
     }
 
     // První produkt – otevřít a přepnout obrázek
