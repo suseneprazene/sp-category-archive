@@ -182,6 +182,35 @@
     const items = document.querySelectorAll('.sp-product-item');
     if ( ! items.length ) return;
 
+    // Přidej třídu has-bundle pro produkty s bundle náhledem
+    items.forEach(function (item)
+    {
+      if (item.querySelector('.fb-bundle-preview'))
+      {
+        item.classList.add('has-bundle');
+      }
+    });
+
+    // Backdrop pro fb-modal (bundle quick-view)
+    var fbModal = document.getElementById('fb-modal');
+    if (fbModal)
+    {
+      var fbBackdrop = document.createElement('div');
+      fbBackdrop.id = 'sp-fb-backdrop';
+      document.body.appendChild(fbBackdrop);
+
+      var fbObserver = new MutationObserver(function ()
+      {
+        fbBackdrop.classList.toggle('sp-fb-backdrop-active', fbModal.style.display === 'block');
+      });
+      fbObserver.observe(fbModal, { attributes: true, attributeFilter: ['style'] });
+
+      fbBackdrop.addEventListener('click', function ()
+      {
+        fbModal.style.display = 'none';
+      });
+    }
+
     // První produkt – otevřít a přepnout obrázek
     if ( ! isTouchDevice() )
     {
@@ -199,7 +228,9 @@
           e.target.closest('.sp-inline-cart-btn') ||
           e.target.closest('.sp-detail-btn')      ||
           e.target.closest('select')              ||
-          e.target.closest('input')
+          e.target.closest('input')               ||
+          e.target.closest('.fb-bundle-preview')  ||
+          e.target.closest('#fb-modal')
         ) return;
 
         if (isTouchDevice()) return;

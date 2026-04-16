@@ -176,7 +176,27 @@
   cursor: pointer;
 }
 
-/* ── MOBIL ── */
+/* ── Bundle preview v archivu ── */
+
+/* Zvětšení max-height pro popis obsahující bundle náhled */
+.sp-product-item.has-bundle.open .sp-product-desc {
+  max-height: 600px;
+}
+
+/* Backdrop pro fb-modal quick-view (vložen JS pluginu) */
+#sp-fb-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 9998;
+}
+
+#sp-fb-backdrop.sp-fb-backdrop-active {
+  display: block;
+}
+
+/* ── Mobil ── */
 @media (max-width: 768px) {
   .sp-archive-outer {
     padding: 24px 16px;
