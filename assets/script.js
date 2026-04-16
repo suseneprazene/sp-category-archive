@@ -239,11 +239,13 @@
         if (prevBtn) prevBtn.style.display = spFbCurrentIndex > 0 ? 'block' : 'none';
         if (nextBtn) nextBtn.style.display = spFbCurrentIndex < spFbTotalItems - 1 ? 'block' : 'none';
 
-        // Přepíšeme název v <h2> správným názvem varianty
+        // Přepíšeme název v <h2> správným názvem varianty.
+        // Guard: nastavíme jen pokud se text liší – jinak by mutace textu
+        // znovu spustila tento observer a vznikla by nekonečná smyčka.
         if (spFbItemName && fbModalContent)
         {
           var h2 = fbModalContent.querySelector('h2');
-          if (h2) h2.textContent = spFbItemName;
+          if (h2 && h2.textContent !== spFbItemName) h2.textContent = spFbItemName;
         }
       }
 

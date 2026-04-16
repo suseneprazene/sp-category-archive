@@ -38,14 +38,14 @@ class SP_Product_Archive
             'sp-product-archive',
             plugin_dir_url( __FILE__ ) . 'assets/style.css',
             [],
-            '1.0.1'
+            '1.0.2'
         );
 
         wp_enqueue_script(
             'sp-product-archive',
             plugin_dir_url( __FILE__ ) . 'assets/script.js',
             [ 'jquery' ],
-            '1.0.1',
+            '1.0.2',
             true
         );
 
