@@ -206,6 +206,18 @@ class SP_Product_Archive
         $_POST['cfb_flavor_selection']    = $cfb_flavor_selection;
         $_REQUEST['cfb_flavor_selection'] = $cfb_flavor_selection;
 
+        // Set up the global WooCommerce product context that CFB's hooks expect.
+        // Without this, CFB filters that access $product or get_the_ID() would
+        // read stale / null values in the AJAX context, causing fatal errors on
+        // the second (and subsequent) add-to-cart calls when the cart is non-empty.
+        global $post, $product;
+        $orig_post    = $post;
+        $orig_product = $product;
+
+        $post    = get_post( $product_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride
+        $product = $wc_product;             // phpcs:ignore WordPress.WP.GlobalVariablesOverride
+        setup_postdata( $post );
+
         // Temporarily allow adding even if the product is flagged as non-purchasable.
         // CFB bundles are sometimes set as not purchasable via the standard WC flow
         // to prevent direct adds, but we handle the flow ourselves here.
@@ -217,9 +229,21 @@ class SP_Product_Archive
         // Clear any stale notices so we only report errors from this call.
         wc_clear_notices();
 
-        $cart_item_key = WC()->cart->add_to_cart( $product_id, 1 );
+        $cart_item_key = false;
+        try {
+            $cart_item_key = WC()->cart->add_to_cart( $product_id, 1 );
+        } catch ( \Throwable $e ) {
+            remove_filter( 'woocommerce_is_purchasable', $force_purchasable, 99 );
+            wp_reset_postdata();
+            $post    = $orig_post;    // phpcs:ignore WordPress.WP.GlobalVariablesOverride
+            $product = $orig_product; // phpcs:ignore WordPress.WP.GlobalVariablesOverride
+            wp_send_json_error( [ 'message' => 'Chyba při přidávání do košíku.' ] );
+        }
 
         remove_filter( 'woocommerce_is_purchasable', $force_purchasable, 99 );
+        wp_reset_postdata();
+        $post    = $orig_post;    // phpcs:ignore WordPress.WP.GlobalVariablesOverride
+        $product = $orig_product; // phpcs:ignore WordPress.WP.GlobalVariablesOverride
 
         if ( false === $cart_item_key ) {
             // Collect WC error notices added during the failed add_to_cart call.
@@ -237,12 +261,25 @@ class SP_Product_Archive
         }
 
         // Return refreshed cart fragments so the JS can update the cart widget.
+        // Wrap in try-catch: rendering the mini cart iterates existing cart items
+        // and may invoke CFB hooks that crash if the cart already contains bundle
+        // items – a render failure should not prevent a successful add-to-cart
+        // response (the JS falls back to get_refreshed_fragments on empty fragments).
         $fragments = [];
         if ( function_exists( 'wc_get_cart_item_data_hash' ) || class_exists( 'WC_AJAX' ) ) {
-            ob_start();
-            woocommerce_mini_cart();
-            $mini_cart = ob_get_clean();
-            $fragments['div.widget_shopping_cart_content'] = '<div class="widget_shopping_cart_content">' . $mini_cart . '</div>';
+            try {
+                ob_start();
+                woocommerce_mini_cart();
+                $mini_cart = ob_get_clean();
+                $fragments['div.widget_shopping_cart_content'] = '<div class="widget_shopping_cart_content">' . $mini_cart . '</div>';
+            } catch ( \Throwable $e ) {
+                // Mini cart render failed – return empty fragments so the JS
+                // falls back to its own get_refreshed_fragments request.
+                if ( ob_get_level() ) {
+                    ob_end_clean();
+                }
+                $fragments = [];
+            }
         }
 
         wp_send_json_success( [
