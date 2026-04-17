@@ -23,7 +23,7 @@ class SP_Product_Archive
         // Cart + order display of CFB flavor selection.
         // Priority 99 ensures we run after any CFB own filter on the same hook.
         add_filter( 'woocommerce_add_cart_item_data',          [ $this, 'cfb_save_selection_to_cart_item' ], 99, 2 );
-        add_filter( 'woocommerce_get_item_data',               [ $this, 'cfb_display_selection_in_cart' ], 10, 2 );
+        add_filter( 'woocommerce_cart_item_name',              [ $this, 'cfb_display_selection_in_cart' ], 10, 3 );
         add_action( 'woocommerce_checkout_create_order_line_item', [ $this, 'cfb_add_selection_to_order_meta' ], 10, 4 );
     }
 
@@ -351,17 +351,24 @@ class SP_Product_Archive
     }
 
     /**
-     * Display the saved CFB flavor selection as cart item meta on the
-     * cart / mini-cart pages.
+     * Append the saved CFB flavor selection to the cart item product name so
+     * it is visible in the cart, mini-cart, checkout order review, and any
+     * custom cart renderer (e.g. flying-cart plugins) that calls the
+     * woocommerce_cart_item_name filter.
      *
-     * @param array $item_data Existing item data rows.
-     * @param array $cart_item Cart item array.
-     * @return array
+     * Using woocommerce_cart_item_name instead of woocommerce_get_item_data
+     * ensures the selection is shown even by renderers that do not call
+     * wc_get_formatted_cart_item_data().
+     *
+     * @param string $product_name  Product name HTML.
+     * @param array  $cart_item     Cart item array.
+     * @param string $cart_item_key Cart item key.
+     * @return string
      */
-    public function cfb_display_selection_in_cart( array $item_data, array $cart_item ): array
+    public function cfb_display_selection_in_cart( string $product_name, array $cart_item, string $cart_item_key ): string
     {
         if ( empty( $cart_item['sp_cfb_selection'] ) ) {
-            return $item_data;
+            return $product_name;
         }
 
         $lines = [];
@@ -372,14 +379,12 @@ class SP_Product_Archive
         }
 
         if ( ! empty( $lines ) ) {
-            $item_data[] = [
-                'key'   => __( 'Výběr balíčku', 'sp-product-archive' ),
-                'value' => implode( '<br>', $lines ),
-                'display' => '',
-            ];
+            $product_name .= '<span class="sp-cfb-bundle-meta">'
+                . implode( '<br>', $lines )
+                . '</span>';
         }
 
-        return $item_data;
+        return $product_name;
     }
 
     /**
