@@ -607,15 +607,34 @@
               _cfbLastRawSelection = null;
               syncCfbAddBtn();
 
+              // Unconditionally fix the DOM counter for the section that was clicked.
+              // Case B's conditional check (displayAfter === displayBefore) is not
+              // reliable here: CFB may have set the counter to an unexpected value
+              // (neither displayBefore nor displayBefore−1), causing Case B to skip
+              // the DOM update, which leaves the counter wrong on the next minus click
+              // and triggers Case C again.  Setting it unconditionally to
+              // max(0, displayBefore − 1) guarantees a consistent state after Case C.
+              if (qtyDisplay !== null && displayBefore !== null)
+              {
+                var caseCDisplay = Math.max(0, displayBefore - 1);
+                if (qtyDisplay.tagName === 'INPUT') { qtyDisplay.value = caseCDisplay; }
+                else { qtyDisplay.textContent = caseCDisplay; }
+              }
+
               if (window.spCfbDebug)
               {
                 cfbLog(
                   '🔧 Minus fix (Case C): CFB over-decremented by ' + (qtyB - qtyA) +
                   ', normalized to -1 for flavor ' + flavorId +
-                  ' (qty: ' + qtyB + ' → ' + selA[flavorId].qty + ')'
+                  ' (qty: ' + qtyB + ' → ' + selA[flavorId].qty + ')' +
+                  (qtyDisplay !== null && displayBefore !== null
+                    ? ', DOM: ' + displayBefore + ' → ' + Math.max(0, displayBefore - 1)
+                    : '')
                 );
               }
-              // Fall through to Case B: also fix DOM if CFB left it unchanged.
+              // Case B is still guarded by its own condition below; it will not
+              // double-decrement because displayAfter will now equal caseCDisplay
+              // (which is ≠ displayBefore unless displayBefore was 0, excluded by Case A).
             }
           }
           catch (ex) { /* JSON parse error – fall through */ }

@@ -237,7 +237,15 @@ class SP_Product_Archive
             wp_reset_postdata();
             $post    = $orig_post;    // phpcs:ignore WordPress.WP.GlobalVariablesOverride
             $product = $orig_product; // phpcs:ignore WordPress.WP.GlobalVariablesOverride
-            wp_send_json_error( [ 'message' => 'Chyba při přidávání do košíku.' ] );
+            // Log the real exception so it is visible in the PHP / WP error log.
+            error_log( '[SP_Product_Archive] ajax_cfb_add_to_cart exception: '
+                . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+            // Expose the message only when WP_DEBUG is active; otherwise return a
+            // generic string to avoid leaking internal paths or stack details.
+            $debug_msg = defined( 'WP_DEBUG' ) && WP_DEBUG
+                ? $e->getMessage()
+                : 'Chyba při přidávání do košíku.';
+            wp_send_json_error( [ 'message' => $debug_msg ] );
         }
 
         remove_filter( 'woocommerce_is_purchasable', $force_purchasable, 99 );
