@@ -1,3 +1,12 @@
+/* ── CFB bundle meta in cart / mini-cart ── */
+.sp-cfb-bundle-meta {
+  display: block;
+  font-size: 0.82em;
+  color: #555;
+  margin-top: 3px;
+  line-height: 1.5;
+}
+
 /* ── Outer wrapper ── */
 .sp-archive-outer {
   max-width: 1200px;
@@ -231,6 +240,168 @@
 
 #sp-fb-backdrop.sp-fb-backdrop-active {
   display: block;
+}
+
+/* ── CFB Bundle Modal (bundles.php / flavor selector) ── */
+
+/* Backdrop */
+#sp-cfb-bundle-modal {
+  display: none;
+}
+
+#sp-cfb-bundle-modal.sp-cfb-bundle-open {
+  display: block;
+}
+
+#sp-cfb-bundle-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 10090;
+}
+
+/* Dialog */
+#sp-cfb-bundle-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10095;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  padding: 28px 24px 20px;
+  width: 92vw;
+  max-width: 560px;
+  max-height: 88vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Zavírací křížek */
+#sp-cfb-bundle-close {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  color: #333;
+  padding: 0;
+  z-index: 1;
+}
+
+#sp-cfb-bundle-close:hover {
+  color: #000;
+}
+
+/* Nadpis */
+#sp-cfb-bundle-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0;
+  padding-right: 28px;
+}
+
+/* Tělo modalu */
+#sp-cfb-bundle-body {
+  flex: 1;
+}
+
+.sp-cfb-bundle-loading {
+  text-align: center;
+  padding: 24px 0;
+  color: #666;
+}
+
+/* Patička – tlačítko přidat do košíku */
+#sp-cfb-bundle-footer {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+#sp-cfb-bundle-add {
+  min-width: 180px;
+}
+
+#sp-cfb-bundle-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Stavová zpráva */
+#sp-cfb-bundle-msg {
+  color: #b00;
+  font-size: 0.9rem;
+  min-height: 1.2em;
+}
+
+/* Bundle summary v popisu produktu – skrytý, rozbalí se s .open */
+.sp-cfb-bundle-summary {
+  display: none;
+  font-size: 0.9rem;
+  margin: 6px 0 4px;
+  color: #333;
+}
+
+.sp-product-item.open .sp-cfb-bundle-summary {
+  display: block;
+}
+
+/* Quantity vstup vykreslený cfb pluginem uvnitř bundle modalu */
+#sp-cfb-bundle-body input[type="number"] {
+  display: inline-block;
+  width: 44px;
+  height: 30px;
+  text-align: center;
+  font-size: 0.9rem;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 0 2px;
+  margin: 0 2px;
+  -moz-appearance: textfield;
+  appearance: textfield;
+  vertical-align: middle;
+}
+
+#sp-cfb-bundle-body input[type="number"]::-webkit-outer-spin-button,
+#sp-cfb-bundle-body input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.sp-cfb-bundle-summary ul {
+  margin: 4px 0 0 16px;
+  padding: 0;
+}
+
+.sp-cfb-bundle-summary li {
+  list-style: disc;
+}
+
+/* Mobil */
+@media (max-width: 600px) {
+  #sp-cfb-bundle-dialog {
+    padding: 20px 14px 16px;
+    max-height: 92vh;
+  }
+
+  #sp-cfb-bundle-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #sp-cfb-bundle-add {
+    width: 100%;
+    text-align: center;
+  }
 }
 
 /* ── Mobil ── */
