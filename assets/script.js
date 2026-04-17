@@ -352,6 +352,76 @@
 
     // ── CFB Debug Logger END ──────────────────────────────────────────────────
 
+    // ── CFB Manual override – cross-section + button ──────────────────────────
+    // CFB enforces a per-data-category total limit. When a bundle has multiple
+    // sections that all share the same data-category value, CFB stops accepting
+    // + clicks once the first section's limit is reached – even though other
+    // sections still have capacity.
+    // This listener fires in the same capture phase, reads the selection BEFORE
+    // the click, waits 0 ms for CFB to process the click, then checks whether
+    // #cfb_flavor_selection changed. If CFB left it unchanged AND the current
+    // total is still below cfbRequiredQty we manually increment the flavor's qty,
+    // update the visible qty display, and re-sync the add button.
+    document.addEventListener('click', function (e)
+    {
+      var plusBtn = e.target.closest('.cfb-plus');
+      if ( ! plusBtn) return;
+      if ( ! cfbBundleModal.classList.contains('sp-cfb-bundle-open')) return;
+
+      var selInput  = document.getElementById('cfb_flavor_selection');
+      var rawBefore = selInput ? selInput.value : null;
+
+      setTimeout(function ()
+      {
+        var rawAfter = selInput ? selInput.value : null;
+
+        // CFB updated normally – nothing to do.
+        if (rawAfter !== rawBefore) return;
+
+        // CFB blocked the click. Check if we should override.
+        if ( ! rawAfter) return;
+
+        var sel;
+        try { sel = JSON.parse(rawAfter); }
+        catch (e) { return; }
+
+        var total = Object.values(sel).reduce(function (s, v)
+        {
+          return s + parseInt(v.qty || 0, 10);
+        }, 0);
+
+        // Only override if the required total hasn't been reached yet.
+        if (cfbRequiredQty <= 0 || total >= cfbRequiredQty) return;
+
+        var flavorId = plusBtn.dataset.flavorId || plusBtn.getAttribute('data-flavor-id');
+        if ( ! flavorId || sel[flavorId] === undefined) return;
+
+        // Increment the flavor qty manually.
+        sel[flavorId].qty = parseInt(sel[flavorId].qty || 0, 10) + 1;
+        selInput.value = JSON.stringify(sel);
+
+        // Update the visible qty display (the element immediately before the + button).
+        var qtyDisplay = plusBtn.previousElementSibling;
+        if (qtyDisplay)
+        {
+          if (qtyDisplay.tagName === 'INPUT') { qtyDisplay.value = sel[flavorId].qty; }
+          else { qtyDisplay.textContent = sel[flavorId].qty; }
+        }
+
+        if (window.spCfbDebug)
+        {
+          cfbLog(
+            '🔧 Manual override: CFB blocked + pro flavor ' + flavorId +
+            ', manuálně inkrementováno na qty=' + sel[flavorId].qty +
+            ' (total: ' + total + '→' + (total + 1) + ' / required: ' + cfbRequiredQty + ')'
+          );
+        }
+
+        _cfbLastRawSelection = null; // reset diff tracker
+        syncCfbAddBtn();
+      }, 0);
+    }, true);
+
     /**
      * Porovná celkový počet vybraných kusů (z #cfb_flavor_selection JSON)
      * s cfbRequiredQty (celkový limit ze všech sekcí, vrácený ze serveru).
