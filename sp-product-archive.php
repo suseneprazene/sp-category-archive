@@ -305,12 +305,23 @@ class SP_Product_Archive
      * Runs at priority 99 (after any CFB own filter) so we do not interfere
      * with whatever CFB itself stores under its own keys.
      *
-     * @param array $cart_item_data Existing cart item data.
+     * NOTE: The $cart_item_data parameter is intentionally untyped.  The CFB
+     * plugin's own woocommerce_add_cart_item_data filter (which runs before ours)
+     * can return bool false when its own validation fails.  Declaring a strict
+     * `array` type would cause a PHP TypeError in that case, aborting the whole
+     * filter chain and hiding the real CFB error.  We return the value unchanged
+     * when it is not an array so WooCommerce can report the real failure reason.
+     *
+     * @param mixed $cart_item_data Existing cart item data (normally array).
      * @param int   $product_id     Product being added.
-     * @return array
+     * @return mixed
      */
-    public function cfb_save_selection_to_cart_item( array $cart_item_data, int $product_id ): array
+    public function cfb_save_selection_to_cart_item( $cart_item_data, int $product_id )
     {
+        if ( ! is_array( $cart_item_data ) ) {
+            return $cart_item_data; // prior filter (e.g. CFB) returned non-array – pass it through
+        }
+
         if ( empty( $_POST['cfb_flavor_selection'] ) ) {
             return $cart_item_data;
         }
