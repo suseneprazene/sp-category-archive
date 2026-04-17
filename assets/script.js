@@ -221,6 +221,7 @@
     var cfbCurrentPermalink  = null;
     var cfbRequiredQty       = 0;
     var cfbPollInterval      = null;
+    var cfbAddToCartNonce    = null; // nonce pro sp_cfb_add_to_cart endpoint
 
     // ── CFB Debug Logger ──────────────────────────────────────────────────────
     // Aktivace: window.spCfbDebug = true (výchozí), deaktivace: false
@@ -456,6 +457,7 @@
           }
           titleEl.textContent = response.data.name;
           cfbRequiredQty      = parseInt(response.data.required_qty || 0, 10);
+          cfbAddToCartNonce   = response.data.add_to_cart_nonce || null;
 
           cfbLog('📦 Modal otevřen', {
             productId:        cfbCurrentProductId,
@@ -536,91 +538,64 @@
       addBtn.textContent = '\u2026';
       document.getElementById('sp-cfb-bundle-msg').textContent = '';
 
-      // CFB bundle produkty mají vlastní WC add-to-cart handler registrovaný přes
-      // woocommerce_add_to_cart_handler_{type}. Tento handler se volá pouze při
-      // klasickém POST na permalink s polem "add-to-cart". Endpoint wc-ajax=add_to_cart
-      // je určen pro jednoduché produkty z katalogu a CFB bundle handler nespouští.
-      //
-      // Serializujeme celý CFB formulář z modalu (obsahuje cfb nonce, product_id,
-      // cfb_flavor_selection a všechny ostatní CFB fieldy) a pošleme POST na
-      // permalink produktu – to je přesně to, co dělá CFB vlastní tlačítko na
-      // stránce produktu.
-      var cfbForm = document.querySelector('#sp-cfb-bundle-body form');
-      var formData;
-
-      if (cfbForm)
-      {
-        // Aktualizujeme cfb_flavor_selection v samotném formuláři před serializací
-        // (cfb ho mohl naposled zapsat přes jQuery .val(), ale formulář ho obsahuje)
-        var hiddenSel = cfbForm.querySelector('[name="cfb_flavor_selection"]');
-        if (hiddenSel) hiddenSel.value = selectionValue;
-
-        formData = $(cfbForm).serialize();
-        // Přidáme "add-to-cart" trigger pokud v formuláři chybí
-        if (formData.indexOf('add-to-cart') === -1)
-        {
-          formData += '&add-to-cart=' + encodeURIComponent(cfbCurrentProductId);
-        }
-        cfbLog('🛒 PŘIDAT DO KOŠÍKU – serializuji CFB formulář', {
-          formAction:  cfbForm.action || cfbCurrentPermalink,
-          formMethod:  cfbForm.method,
-          fields:      formData
-        });
-      }
-      else
-      {
-        // Záložní: pošleme jen klíčové fieldy
-        var p = new URLSearchParams();
-        p.append('add-to-cart',          cfbCurrentProductId);
-        p.append('product_id',           cfbCurrentProductId);
-        p.append('quantity',             '1');
-        p.append('cfb_flavor_selection', selectionValue);
-        formData = p.toString();
-        cfbLog('🛒 PŘIDAT DO KOŠÍKU – CFB form nenalezen, záložní data', { params: formData });
-      }
-
-      var postUrl = (cfbForm && cfbForm.action) ? cfbForm.action : cfbCurrentPermalink;
-
-      cfbLog('🛒 PŘIDAT DO KOŠÍKU – POST na permalink', {
-        url:             postUrl,
-        product_id:      cfbCurrentProductId,
+      // Použijeme vlastní WP AJAX endpoint sp_cfb_add_to_cart.
+      // Tento endpoint volá WC()->cart->add_to_cart() přímo – CFB bundle produkty
+      // jsou pro standardní WC tok (template_redirect) nastaveny jako
+      // is_purchasable=false, proto POST na permalink vždy selže.
+      // Náš endpoint obchází is_purchasable, ale nechá CFB filtry (add_cart_item_data,
+      // add_to_cart_validation) proběhnout normálně přes $_POST['cfb_flavor_selection'].
+      cfbLog('🛒 PŘIDAT DO KOŠÍKU – volám sp_cfb_add_to_cart', {
+        product_id:          cfbCurrentProductId,
         cfb_flavor_selection: (function ()
         {
           try { return JSON.parse(selectionValue); } catch (e) { return selectionValue; }
-        }())
+        }()),
+        nonce_present: !!cfbAddToCartNonce
       });
 
       $.ajax(
       {
-        url:         postUrl,
-        method:      'POST',
-        contentType: 'application/x-www-form-urlencoded',
-        data:        formData,
-        success: function (responseHtml, status, jqXHR)
+        url:    SP_Archive.ajax_url,
+        method: 'POST',
+        data:
         {
-          // WooCommerce zpracuje add-to-cart a jQuery sleduje redirect na cart/product page.
-          // Odpověď je vždy HTML (cart page nebo product page s chybou).
-          // Detekujeme WC notice v HTML odpovědi.
-          var $resp = $(responseHtml);
-          var errors = $resp.find('.woocommerce-error li').map(function () { return $(this).text().trim(); }).get();
-
-          cfbLog('✅ Košík POST – odpověď', {
-            status:      jqXHR.status,
-            finalUrl:    jqXHR.getResponseHeader('X-Final-URL') || '(neznámá)',
-            wcErrors:    errors,
-            htmlLength:  (typeof responseHtml === 'string' ? responseHtml.length : 0) + ' znaků'
+          action:               'sp_cfb_add_to_cart',
+          nonce:                cfbAddToCartNonce,
+          product_id:           cfbCurrentProductId,
+          cfb_flavor_selection: selectionValue
+        },
+        success: function (response, status, jqXHR)
+        {
+          cfbLog('✅ sp_cfb_add_to_cart – odpověď', {
+            success:        response && response.success,
+            cart_item_key:  response && response.data && response.data.cart_item_key,
+            message:        response && response.data && response.data.message,
+            fragmentKeys:   response && response.data && response.data.fragments
+                              ? Object.keys(response.data.fragments) : []
           });
 
-          if (errors.length > 0)
+          if ( ! response || ! response.success)
           {
-            document.getElementById('sp-cfb-bundle-msg').textContent = errors.join(' ');
+            var msg = (response && response.data && response.data.message)
+              || 'Produkt se nepodařilo přidat do košíku.';
+            document.getElementById('sp-cfb-bundle-msg').textContent = msg;
             addBtn.textContent = 'PŘIDAT DO KOŠÍKU';
             addBtn.disabled    = false;
             return;
           }
 
-          // Refresh WooCommerce fragmentů košíku (aktualizace ikonky košíku v navigaci)
-          if (typeof SP_Archive !== 'undefined' && SP_Archive.wc_ajax_url)
+          // Aplikujeme fragmenty košíku ze serveru, pak záložní refresh
+          var frags = response.data && response.data.fragments;
+          if (frags && Object.keys(frags).length > 0)
+          {
+            $.each(frags, function (key, value)
+            {
+              if ($(key).length) $(key).replaceWith(value);
+            });
+            $(document.body).trigger('wc_fragments_refreshed');
+            cfbLog('🔄 Fragmenty aplikovány ze sp_cfb_add_to_cart odpovědi');
+          }
+          else if (typeof SP_Archive !== 'undefined' && SP_Archive.wc_ajax_url)
           {
             $.ajax(
             {
@@ -628,7 +603,9 @@
               method: 'POST',
               success: function (r)
               {
-                cfbLog('🔄 Fragmenty košíku refreshnuty', { fragmentKeys: r && r.fragments ? Object.keys(r.fragments) : [] });
+                cfbLog('🔄 Fragmenty košíku refreshnuty (záložní)', {
+                  fragmentKeys: r && r.fragments ? Object.keys(r.fragments) : []
+                });
                 if (r && r.fragments)
                 {
                   $.each(r.fragments, function (key, value)
@@ -651,7 +628,7 @@
         },
         error: function (jqXHR, textStatus, errorThrown)
         {
-          cfbLog('❌ Košík POST – HTTP chyba', {
+          cfbLog('❌ sp_cfb_add_to_cart – HTTP chyba', {
             status:      jqXHR.status,
             textStatus:  textStatus,
             errorThrown: errorThrown,

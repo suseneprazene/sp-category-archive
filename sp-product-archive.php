@@ -15,8 +15,10 @@ class SP_Product_Archive
         add_filter( 'template_include', [ $this, 'override_category_template' ], 99 );
         add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
         add_action( 'wp_enqueue_scripts', [ $this, 'maybe_enqueue_bundle_assets' ], 20 );
-        add_action( 'wp_ajax_sp_cfb_bundle_ui',        [ $this, 'ajax_cfb_bundle_ui' ] );
-        add_action( 'wp_ajax_nopriv_sp_cfb_bundle_ui', [ $this, 'ajax_cfb_bundle_ui' ] );
+        add_action( 'wp_ajax_sp_cfb_bundle_ui',         [ $this, 'ajax_cfb_bundle_ui' ] );
+        add_action( 'wp_ajax_nopriv_sp_cfb_bundle_ui',  [ $this, 'ajax_cfb_bundle_ui' ] );
+        add_action( 'wp_ajax_sp_cfb_add_to_cart',        [ $this, 'ajax_cfb_add_to_cart' ] );
+        add_action( 'wp_ajax_nopriv_sp_cfb_add_to_cart', [ $this, 'ajax_cfb_add_to_cart' ] );
     }
 
     public function override_category_template( $template )
@@ -159,6 +161,88 @@ class SP_Product_Archive
             'name'             => $wc_product->get_name(),
             'required_qty'     => $required_qty,
             'bundle_items_raw' => $bundle_items, // debug: raw _cfb_bundle_items structure
+            'add_to_cart_nonce' => wp_create_nonce( 'sp_cfb_add_to_cart' ),
+        ] );
+    }
+
+    /**
+     * AJAX handler: adds a CFB bundle product to the WooCommerce cart.
+     *
+     * Calls WC()->cart->add_to_cart() directly, bypassing the standard
+     * template_redirect flow (which checks is_purchasable() and may reject
+     * CFB custom product types).  CFB's own hooks – woocommerce_add_cart_item_data
+     * and woocommerce_add_to_cart_validation – still fire normally because they
+     * are filters/actions called inside WC's add_to_cart() method.
+     *
+     * $_POST['cfb_flavor_selection'] is set before the call so CFB's filter can
+     * read it exactly as it would on the single product page.
+     */
+    public function ajax_cfb_add_to_cart()
+    {
+        check_ajax_referer( 'sp_cfb_add_to_cart', 'nonce' );
+
+        $product_id           = absint( $_POST['product_id'] ?? 0 );
+        $cfb_flavor_selection = isset( $_POST['cfb_flavor_selection'] )
+            ? wp_unslash( $_POST['cfb_flavor_selection'] )
+            : '';
+
+        if ( ! $product_id ) {
+            wp_send_json_error( [ 'message' => 'Missing product_id.' ] );
+        }
+
+        $wc_product = wc_get_product( $product_id );
+        if ( ! $wc_product ) {
+            wp_send_json_error( [ 'message' => 'Product not found.' ] );
+        }
+
+        // Put cfb_flavor_selection in $_POST so CFB's woocommerce_add_cart_item_data
+        // filter can read it (same as on the single product page form submit).
+        $_POST['cfb_flavor_selection']    = $cfb_flavor_selection;
+        $_REQUEST['cfb_flavor_selection'] = $cfb_flavor_selection;
+
+        // Temporarily allow adding even if the product is flagged as non-purchasable.
+        // CFB bundles are sometimes set as not purchasable via the standard WC flow
+        // to prevent direct adds, but we handle the flow ourselves here.
+        $force_purchasable = static function ( $purchasable, $product ) use ( $product_id ) {
+            return ( $product->get_id() === $product_id ) ? true : $purchasable;
+        };
+        add_filter( 'woocommerce_is_purchasable', $force_purchasable, 99, 2 );
+
+        // Clear any stale notices so we only report errors from this call.
+        wc_clear_notices();
+
+        $cart_item_key = WC()->cart->add_to_cart( $product_id, 1 );
+
+        remove_filter( 'woocommerce_is_purchasable', $force_purchasable, 99 );
+
+        if ( false === $cart_item_key ) {
+            // Collect WC error notices added during the failed add_to_cart call.
+            $error_notices = wc_get_notices( 'error' );
+            $messages      = array_map(
+                static function ( $n ) {
+                    return is_array( $n ) ? wp_strip_all_tags( $n['notice'] ?? '' ) : wp_strip_all_tags( $n );
+                },
+                $error_notices
+            );
+            wc_clear_notices();
+            wp_send_json_error( [
+                'message' => implode( ' ', array_filter( $messages ) ) ?: 'Produkt se nepodařilo přidat do košíku.',
+            ] );
+        }
+
+        // Return refreshed cart fragments so the JS can update the cart widget.
+        $fragments = [];
+        if ( function_exists( 'wc_get_cart_item_data_hash' ) || class_exists( 'WC_AJAX' ) ) {
+            ob_start();
+            woocommerce_mini_cart();
+            $mini_cart = ob_get_clean();
+            $fragments['div.widget_shopping_cart_content'] = '<div class="widget_shopping_cart_content">' . $mini_cart . '</div>';
+        }
+
+        wp_send_json_success( [
+            'cart_item_key' => $cart_item_key,
+            'fragments'     => $fragments,
+            'cart_hash'     => WC()->cart->get_cart_hash(),
         ] );
     }
 }
