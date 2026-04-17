@@ -220,6 +220,20 @@
   display: none;
 }
 
+/* Centering override for #fb-modal – ensures the modal always opens
+   in the middle of the viewport on both desktop and mobile. */
+#fb-modal[style*="display: block"],
+#fb-modal[style*="display:block"] {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  z-index: 9999 !important;
+  max-width: min(95vw, 700px);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
 /* Backdrop pro fb-modal quick-view (vložen JS pluginu) */
 #sp-fb-backdrop {
   display: none;
@@ -304,5 +318,75 @@
     gap: 10px;
     flex-wrap: wrap;
     align-items: center;
+  }
+}
+
+/* ── Bundle selector modal ── */
+
+#sp-bundle-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 9998;
+}
+
+#sp-bundle-backdrop.sp-bundle-backdrop-active {
+  display: block;
+}
+
+#sp-bundle-modal {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 9999;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  padding: 32px 24px 20px;
+  width: min(95vw, 640px);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+#sp-bundle-modal.sp-bundle-modal-open {
+  display: block;
+}
+
+#sp-bundle-close {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  background: none;
+  border: none;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  color: #111;
+  padding: 0;
+}
+
+#sp-bundle-body {
+  margin-bottom: 16px;
+}
+
+#sp-bundle-footer {
+  text-align: center;
+  padding-top: 8px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.sp-bundle-loading {
+  text-align: center;
+  padding: 48px 0;
+  color: #666;
+  font-size: 1rem;
+}
+
+@media (max-width: 768px) {
+  #sp-bundle-modal {
+    padding: 24px 14px 16px;
   }
 }

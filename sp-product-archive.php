@@ -15,6 +15,8 @@ class SP_Product_Archive
         add_filter( 'template_include', [ $this, 'override_category_template' ], 99 );
         add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
         add_action( 'wp_enqueue_scripts', [ $this, 'maybe_enqueue_bundle_assets' ], 20 );
+        add_action( 'wp_ajax_sp_bundle_selector',        [ $this, 'bundle_selector_ajax' ] );
+        add_action( 'wp_ajax_nopriv_sp_bundle_selector', [ $this, 'bundle_selector_ajax' ] );
     }
 
     public function override_category_template( $template )
@@ -101,6 +103,41 @@ class SP_Product_Archive
         if ( wp_style_is( 'fb-modal-styles', 'registered' ) ) {
             wp_enqueue_style( 'fb-modal-styles' );
         }
+    }
+
+    /**
+     * AJAX endpoint: render the bundle selector UI for a given bundle product.
+     * Returns JSON { success: true, data: { html: '...' } } on success.
+     * The HTML is the output of woocommerce_before_add_to_cart_button with
+     * the global $product set to the requested product – identical to what
+     * renders on the single product page.
+     */
+    public function bundle_selector_ajax()
+    {
+        check_ajax_referer( 'sp-add-to-cart', 'nonce' );
+
+        $product_id = isset( $_POST['product_id'] ) ? intval( $_POST['product_id'] ) : 0;
+        if ( ! $product_id ) {
+            wp_send_json_error( [ 'message' => 'Invalid product ID' ] );
+        }
+
+        // Only serve bundle products to prevent leaking other hook output.
+        if ( get_post_meta( $product_id, '_cfb_is_bundle', true ) !== '1' ) {
+            wp_send_json_error( [ 'message' => 'Not a bundle product' ] );
+        }
+
+        global $product;
+        $product = wc_get_product( $product_id );
+        if ( ! $product ) {
+            wp_send_json_error( [ 'message' => 'Product not found' ] );
+        }
+
+        // Capture the hook output – same as on single product page.
+        ob_start();
+        do_action( 'woocommerce_before_add_to_cart_button' );
+        $html = ob_get_clean();
+
+        wp_send_json_success( [ 'html' => $html ] );
     }
 }
 

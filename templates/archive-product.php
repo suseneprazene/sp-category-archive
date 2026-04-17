@@ -67,9 +67,31 @@ $products = wc_get_products([
                     $var_attrs[ $normalized_key ] = stripslashes( trim( $attr_val, '"' ) );
                 }
 
+                        // Build a plain-text price label for use in <option> elements.
+                $price_text = '';
+                if ( $var_obj )
+                {
+                    $regular = $var_obj->get_regular_price();
+                    $sale    = $var_obj->get_sale_price();
+                    if ( $regular !== '' && $regular !== null )
+                    {
+                        if ( $var_obj->is_on_sale() && $sale !== '' && $sale !== null )
+                        {
+                            $price_text = strip_tags( wc_price( $regular ) )
+                                        . ' → '
+                                        . strip_tags( wc_price( $sale ) );
+                        }
+                        else
+                        {
+                            $price_text = strip_tags( wc_price( $regular ) );
+                        }
+                    }
+                }
+
                 $variations_data[] = [
                     'id'         => $variation['variation_id'],
                     'price_html' => $var_obj ? $var_obj->get_price_html() : $price_html,
+                    'price_text' => $price_text,
                     'image'      => $var_image,
                     'attributes' => $var_attrs,
                     'in_stock'   => $var_obj ? $var_obj->is_in_stock() : false,
@@ -79,7 +101,34 @@ $products = wc_get_products([
 
         $active_class = ( $index === 0 ) ? ' active' : '';
 
-        // Jméno pro zobrazení – pro variabilní produkty přidáme hodnoty atributů první varianty
+        // Detect bundle product (managed by the produkty-darky-kupony plugin).
+        $is_bundle = get_post_meta( $product_id, '_cfb_is_bundle', true ) === '1';
+
+        // Build attribute → option-value → price-text map for <option> labels.
+        // If multiple variations share the same option value with different prices,
+        // we leave the price empty to avoid misleading labels.
+        $attribute_price_map = [];
+        if ( $is_variable )
+        {
+            foreach ( $variations_data as $var )
+            {
+                foreach ( $var['attributes'] as $attr_key => $attr_val )
+                {
+                    if ( $attr_val === '' ) continue; // "any" — skip
+                    if ( ! isset( $attribute_price_map[ $attr_key ][ $attr_val ] ) )
+                    {
+                        $attribute_price_map[ $attr_key ][ $attr_val ] = $var['price_text'];
+                    }
+                    elseif ( $attribute_price_map[ $attr_key ][ $attr_val ] !== $var['price_text'] )
+                    {
+                        // Conflict: same attribute value but different prices → hide price
+                        $attribute_price_map[ $attr_key ][ $attr_val ] = '';
+                    }
+                }
+            }
+        }
+
+
         $display_name = $name;
         if ( $is_variable && ! empty( $variations_data ) )
         {
@@ -146,9 +195,13 @@ $products = wc_get_products([
                     data-attribute="<?php echo esc_attr( $attr_key_normalized ); ?>"
                   >
                     <option value="">— Vyberte —</option>
-<?php foreach ( $options as $option ) : ?>
-  <option value="<?php echo esc_attr( trim( $option, '"' ) ); ?>">
-    <?php echo esc_html( trim( $option, '"' ) ); ?>
+<?php foreach ( $options as $option ) :
+  $opt_val        = trim( $option, '"' );
+  $opt_price_text = $attribute_price_map[ $attr_key_normalized ][ $opt_val ] ?? '';
+  $opt_label      = $opt_val . ( $opt_price_text ? ' — ' . $opt_price_text : '' );
+?>
+  <option value="<?php echo esc_attr( $opt_val ); ?>">
+    <?php echo esc_html( $opt_label ); ?>
   </option>
 <?php endforeach; ?>
                   </select>
@@ -164,12 +217,22 @@ $products = wc_get_products([
               <?php endif; ?>
             </div>
             <input type="number" class="sp-qty sp-inline-qty" value="1" min="1" />
-            <button
-              class="sp-add-to-cart custom-product-btn sp-inline-cart-btn"
-              data-product-id="<?php echo esc_attr( $product_id ); ?>"
-            >
-              DO KOŠÍKU
-            </button>
+            <?php if ( $is_bundle ) : ?>
+              <button
+                class="sp-bundle-btn custom-product-btn"
+                data-product-id="<?php echo esc_attr( $product_id ); ?>"
+                data-permalink="<?php echo esc_url( $permalink ); ?>"
+              >
+                VÝBĚR PRODUKTŮ
+              </button>
+            <?php else : ?>
+              <button
+                class="sp-add-to-cart custom-product-btn sp-inline-cart-btn"
+                data-product-id="<?php echo esc_attr( $product_id ); ?>"
+              >
+                DO KOŠÍKU
+              </button>
+            <?php endif; ?>
             <a href="<?php echo esc_url( $permalink ); ?>" class="sp-detail-btn">
               ZOBRAZIT DETAIL
             </a>
@@ -219,12 +282,22 @@ $products = wc_get_products([
           </div>
 
           <div class="sp-action-row">
-            <button
-              class="sp-add-to-cart custom-product-btn"
-              data-product-id="<?php echo esc_attr( $product_id ); ?>"
-            >
-              DO KOŠÍKU
-            </button>
+            <?php if ( $is_bundle ) : ?>
+              <button
+                class="sp-bundle-btn custom-product-btn"
+                data-product-id="<?php echo esc_attr( $product_id ); ?>"
+                data-permalink="<?php echo esc_url( $permalink ); ?>"
+              >
+                VÝBĚR PRODUKTŮ
+              </button>
+            <?php else : ?>
+              <button
+                class="sp-add-to-cart custom-product-btn"
+                data-product-id="<?php echo esc_attr( $product_id ); ?>"
+              >
+                DO KOŠÍKU
+              </button>
+            <?php endif; ?>
             <a href="<?php echo esc_url( $permalink ); ?>" class="sp-detail-btn">
               ZOBRAZIT DETAIL
             </a>
@@ -252,5 +325,15 @@ $products = wc_get_products([
 
   </div><!-- /.sp-archive-wrapper -->
 </div><!-- /.sp-archive-outer -->
+
+<!-- ── Bundle selector modal (single instance, populated via AJAX on demand) ── -->
+<div id="sp-bundle-backdrop" class="sp-bundle-backdrop"></div>
+<div id="sp-bundle-modal" role="dialog" aria-modal="true" aria-label="<?php esc_attr_e( 'Výběr produktů', 'sp-product-archive' ); ?>">
+  <button id="sp-bundle-close" aria-label="<?php esc_attr_e( 'Zavřít', 'sp-product-archive' ); ?>">&times;</button>
+  <div id="sp-bundle-body"></div>
+  <div id="sp-bundle-footer">
+    <button id="sp-bundle-submit" class="button custom-product-btn">PŘIDAT DO KOŠÍKU</button>
+  </div>
+</div>
 
 <?php get_footer(); ?>

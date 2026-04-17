@@ -302,6 +302,7 @@
         // Ignoruj klik na interaktivní prvky
         if (
           e.target.closest('.sp-inline-cart-btn') ||
+          e.target.closest('.sp-bundle-btn')      ||
           e.target.closest('.sp-detail-btn')      ||
           e.target.closest('select')              ||
           e.target.closest('input')               ||
@@ -323,6 +324,160 @@
         }
       });
     });
+
+    // ── Bundle selector modal ────────────────────────────────
+
+    var bundleBackdrop = document.getElementById('sp-bundle-backdrop');
+    var bundleModal    = document.getElementById('sp-bundle-modal');
+    var bundleBody     = document.getElementById('sp-bundle-body');
+    var bundleSubmit   = document.getElementById('sp-bundle-submit');
+    var bundleClose    = document.getElementById('sp-bundle-close');
+
+    var spBundleProductId  = null;
+    var spBundlePermalink  = null;
+
+    function openBundleModal(productId, permalink)
+    {
+      spBundleProductId = productId;
+      spBundlePermalink = permalink;
+
+      bundleBackdrop.classList.add('sp-bundle-backdrop-active');
+      bundleModal.classList.add('sp-bundle-modal-open');
+
+      // Show loading placeholder while AJAX runs
+      bundleBody.innerHTML = '<div class="sp-bundle-loading">Načítám…</div>';
+
+      $.ajax(
+      {
+        url:    SP_Archive.ajax_url,
+        method: 'POST',
+        data:
+        {
+          action:     'sp_bundle_selector',
+          product_id: productId,
+          nonce:      SP_Archive.nonce
+        },
+        success: function (response)
+        {
+          if (response.success && response.data.html)
+          {
+            // jQuery .html() executes <script> tags automatically
+            $(bundleBody).html(response.data.html);
+          }
+          else
+          {
+            bundleBody.innerHTML = '<p>Nepodařilo se načíst výběr produktů.</p>';
+          }
+        },
+        error: function ()
+        {
+          bundleBody.innerHTML = '<p>Chyba při načítání výběru produktů.</p>';
+        }
+      });
+    }
+
+    function closeBundleModal()
+    {
+      bundleModal.classList.remove('sp-bundle-modal-open');
+      bundleBackdrop.classList.remove('sp-bundle-backdrop-active');
+      // Clear injected HTML and JS instance
+      $(bundleBody).empty();
+      spBundleProductId = null;
+      spBundlePermalink = null;
+    }
+
+    // Open modal when "VÝBĚR PRODUKTŮ" is clicked
+    document.addEventListener('click', function (e)
+    {
+      var btn = e.target.closest('.sp-bundle-btn');
+      if ( ! btn ) return;
+
+      var item       = btn.closest('.sp-product-item');
+      var productId  = btn.dataset.productId  || (item && item.dataset.id);
+      var permalink  = btn.dataset.permalink  || (item && item.dataset.permalink);
+
+      openBundleModal(productId, permalink);
+    });
+
+    // Close via X button or backdrop
+    if (bundleClose)    bundleClose.addEventListener('click', closeBundleModal);
+    if (bundleBackdrop) bundleBackdrop.addEventListener('click', closeBundleModal);
+
+    // Escape key closes the modal
+    document.addEventListener('keydown', function (e)
+    {
+      if (e.key === 'Escape' && bundleModal && bundleModal.classList.contains('sp-bundle-modal-open'))
+      {
+        closeBundleModal();
+      }
+    });
+
+    // "PŘIDAT DO KOŠÍKU" inside the bundle modal
+    if (bundleSubmit)
+    {
+      bundleSubmit.addEventListener('click', function ()
+      {
+        if ( ! spBundleProductId || ! spBundlePermalink ) return;
+
+        var flavorInput = bundleBody.querySelector('#cfb_flavor_selection');
+        var flavorData  = flavorInput ? flavorInput.value : '';
+
+        if ( ! flavorData )
+        {
+          alert('Prosím vyberte produkty v každé sekci výběru.');
+          return;
+        }
+
+        var originalText           = bundleSubmit.textContent;
+        bundleSubmit.disabled      = true;
+        bundleSubmit.textContent   = '…';
+
+        var params = new URLSearchParams();
+        params.append('add-to-cart',         spBundleProductId);
+        params.append('product_id',          spBundleProductId);
+        params.append('quantity',            1);
+        params.append('cfb_flavor_selection', flavorData);
+
+        $.ajax(
+        {
+          url:         spBundlePermalink,
+          method:      'POST',
+          contentType: 'application/x-www-form-urlencoded',
+          data:        params.toString(),
+          success: function ()
+          {
+            closeBundleModal();
+
+            // Refresh WooCommerce mini-cart fragments
+            if (typeof SP_Archive !== 'undefined' && SP_Archive.wc_ajax_url)
+            {
+              $.ajax(
+              {
+                url:    SP_Archive.wc_ajax_url.replace('%%endpoint%%', 'get_refreshed_fragments'),
+                method: 'POST',
+                success: function (response)
+                {
+                  if (response && response.fragments)
+                  {
+                    $.each(response.fragments, function (key, value)
+                    {
+                      if ($(key).length) $(key).replaceWith(value);
+                    });
+                    $(document.body).trigger('wc_fragments_refreshed');
+                  }
+                }
+              });
+            }
+          },
+          error: function ()
+          {
+            alert('Chyba při přidávání do košíku. Zkuste to prosím znovu.');
+            bundleSubmit.disabled    = false;
+            bundleSubmit.textContent = originalText;
+          }
+        });
+      });
+    }
 
     // ── Přidání do košíku ──
     document.addEventListener('click', function (e)
