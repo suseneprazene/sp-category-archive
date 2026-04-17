@@ -155,9 +155,10 @@ class SP_Product_Archive
         $required_qty = (int) array_sum( array_column( $bundle_items, 'limit' ) );
 
         wp_send_json_success( [
-            'html'         => $html,
-            'name'         => $wc_product->get_name(),
-            'required_qty' => $required_qty,
+            'html'             => $html,
+            'name'             => $wc_product->get_name(),
+            'required_qty'     => $required_qty,
+            'bundle_items_raw' => $bundle_items, // debug: raw _cfb_bundle_items structure
         ] );
     }
 }
