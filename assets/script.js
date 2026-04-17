@@ -512,6 +512,95 @@
       }, 0);
     }, true);
 
+    // ── CFB Manual minus-sync ──────────────────────────────────────────────────
+    // When a flavor is added via the manual + override (above), CFB's section-
+    // internal counter for that flavor stays at 0.  On a subsequent − click CFB
+    // decrements the global JSON qty but does NOT update the DOM visual counter
+    // (because its section-internal state is 0 and it won't go below 0).
+    // A second − click then also decrements JSON (double-decrement), leaving the
+    // global qty lower than the true number of items in section 1 and making it
+    // impossible to re-enable the "Add to cart" button.
+    //
+    // This handler patches both failure modes:
+    //   Case A – DOM counter was already 0 but CFB still decremented JSON:
+    //            revert the JSON to rawBefore (false decrement).
+    //   Case B – DOM counter was > 0 but CFB did not update it (section-internal
+    //            state mismatch): manually decrement the DOM counter.
+    document.addEventListener('click', function (e)
+    {
+      var minusBtn = e.target.closest('.cfb-minus');
+      if ( ! minusBtn) return;
+      if ( ! cfbBundleModal.classList.contains('sp-cfb-bundle-open')) return;
+
+      var selInput = document.getElementById('cfb_flavor_selection');
+      if ( ! selInput || ! selInput.value) return;
+      var rawBefore = selInput.value;
+
+      var flavorId = minusBtn.dataset.flavorId || minusBtn.getAttribute('data-flavor-id');
+
+      // Locate the qty display element.  The standard CFB structure is
+      // [.cfb-minus][qty-el][.cfb-plus].  We resolve it the same way the + override
+      // does: find the sibling .cfb-plus for this flavor and take its
+      // previousElementSibling so both handlers always use the same element.
+      var parent      = minusBtn.parentElement;
+      var plusSibling = (flavorId && parent)
+        ? parent.querySelector('.cfb-plus[data-flavor-id="' + flavorId + '"]')
+        : null;
+      var qtyDisplay  = plusSibling
+        ? plusSibling.previousElementSibling
+        : minusBtn.nextElementSibling; // fallback: next sibling
+
+      var displayBefore = qtyDisplay
+        ? (qtyDisplay.tagName === 'INPUT'
+            ? parseInt(qtyDisplay.value       || 0, 10)
+            : parseInt(qtyDisplay.textContent || 0, 10))
+        : null;
+
+      setTimeout(function ()
+      {
+        if ( ! selInput || selInput.value === rawBefore) return; // JSON unchanged – nothing to do
+
+        if (qtyDisplay === null || displayBefore === null) return;
+
+        var displayAfter = qtyDisplay.tagName === 'INPUT'
+          ? parseInt(qtyDisplay.value       || 0, 10)
+          : parseInt(qtyDisplay.textContent || 0, 10);
+
+        // Case A: DOM was already 0 → CFB had nothing to remove from this section
+        // but still decremented the global JSON.  Revert.
+        if (displayBefore === 0)
+        {
+          selInput.value = rawBefore;
+          _cfbLastRawSelection = null;
+          syncCfbAddBtn();
+          if (window.spCfbDebug)
+          {
+            cfbLog(
+              '🔧 Minus revert: DOM counter was 0 – reverted false JSON decrement for flavor ' + flavorId
+            );
+          }
+          return;
+        }
+
+        // Case B: DOM was > 0 but CFB did not update it (section-internal mismatch).
+        // Manually decrement the DOM counter.
+        if (displayAfter === displayBefore)
+        {
+          var newDisplay = displayBefore - 1;
+          if (qtyDisplay.tagName === 'INPUT') { qtyDisplay.value = newDisplay; }
+          else { qtyDisplay.textContent = newDisplay; }
+          _cfbLastRawSelection = null;
+          if (window.spCfbDebug)
+          {
+            cfbLog(
+              '🔧 Minus sync: CFB did not update DOM – manually decremented ' +
+              displayBefore + '→' + newDisplay + ' for flavor ' + flavorId
+            );
+          }
+        }
+      }, 0);
+    }, true);
+
     /**
      * Porovná celkový počet vybraných kusů (z #cfb_flavor_selection JSON)
      * s cfbRequiredQty (celkový limit ze všech sekcí, vrácený ze serveru).
