@@ -182,7 +182,7 @@
     const items = document.querySelectorAll('.sp-product-item');
     if ( ! items.length ) return;
 
-    // Přidej třídu has-bundle pro produkty s bundle náhledem
+    // Přidej třídu has-bundle pro produkty s bundle náhledem (fb fixed bundles)
     items.forEach(function (item)
     {
       if (item.querySelector('.fb-bundle-preview'))
@@ -191,7 +191,201 @@
       }
     });
 
-    // Backdrop pro fb-modal (bundle quick-view)
+    // ── CFB Bundle Modal (bundles.php / flavor selector) ────────────────────
+
+    // Vytvoříme modal element (pouze jednou)
+    var cfbBundleModal = document.getElementById('sp-cfb-bundle-modal');
+    if ( ! cfbBundleModal)
+    {
+      cfbBundleModal = document.createElement('div');
+      cfbBundleModal.id = 'sp-cfb-bundle-modal';
+      cfbBundleModal.setAttribute('role', 'dialog');
+      cfbBundleModal.setAttribute('aria-modal', 'true');
+      cfbBundleModal.innerHTML =
+        '<div id="sp-cfb-bundle-backdrop"></div>' +
+        '<div id="sp-cfb-bundle-dialog">' +
+          '<button id="sp-cfb-bundle-close" aria-label="Zavřít">&times;</button>' +
+          '<h2 id="sp-cfb-bundle-title"></h2>' +
+          '<div id="sp-cfb-bundle-body"></div>' +
+          '<div id="sp-cfb-bundle-footer">' +
+            '<button id="sp-cfb-bundle-add" class="custom-product-btn single_add_to_cart_button" disabled>' +
+              'PŘIDAT DO KOŠÍKU' +
+            '</button>' +
+          '</div>' +
+          '<div id="sp-cfb-bundle-msg"></div>' +
+        '</div>';
+      document.body.appendChild(cfbBundleModal);
+    }
+
+    var cfbCurrentProductId  = null;
+    var cfbCurrentPermalink  = null;
+
+    function closeCfbBundleModal()
+    {
+      cfbBundleModal.classList.remove('sp-cfb-bundle-open');
+      // Skryjeme také cfb product-preview modal, pokud byl otevřen uvnitř
+      var innerBg  = document.getElementById('cfbModalBg');
+      var innerMod = document.getElementById('cfbModal');
+      if (innerBg)  innerBg.style.display  = 'none';
+      if (innerMod) innerMod.style.display = 'none';
+    }
+
+    document.getElementById('sp-cfb-bundle-backdrop').addEventListener('click', closeCfbBundleModal);
+    document.getElementById('sp-cfb-bundle-close').addEventListener('click', closeCfbBundleModal);
+
+    // Klávesa Escape zavře modal
+    document.addEventListener('keydown', function (e)
+    {
+      if (e.key === 'Escape' && cfbBundleModal.classList.contains('sp-cfb-bundle-open'))
+      {
+        closeCfbBundleModal();
+      }
+    });
+
+    // Klik na tlačítko "VÝBĚR PRODUKTŮ"
+    document.addEventListener('click', function (e)
+    {
+      var btn = e.target.closest('.sp-bundle-select-btn');
+      if ( ! btn) return;
+
+      e.stopPropagation();
+
+      var item = btn.closest('.sp-product-item');
+      cfbCurrentProductId = btn.dataset.productId || ( item ? item.dataset.id : null );
+      cfbCurrentPermalink = item ? item.dataset.permalink : null;
+
+      var titleEl  = document.getElementById('sp-cfb-bundle-title');
+      var bodyEl   = document.getElementById('sp-cfb-bundle-body');
+      var addBtn   = document.getElementById('sp-cfb-bundle-add');
+      var msgEl    = document.getElementById('sp-cfb-bundle-msg');
+
+      // Výchozí stav modalu
+      titleEl.textContent  = item ? item.dataset.name : '';
+      bodyEl.innerHTML     = '<div class="sp-cfb-bundle-loading">Načítám…</div>';
+      addBtn.disabled      = true;
+      addBtn.textContent   = 'PŘIDAT DO KOŠÍKU';
+      msgEl.textContent    = '';
+
+      cfbBundleModal.classList.add('sp-cfb-bundle-open');
+
+      // Načteme bundle UI přes AJAX (renderuje cfb plugin server-side)
+      $.ajax(
+      {
+        url:    SP_Archive.ajax_url,
+        method: 'GET',
+        data:
+        {
+          action:     'sp_cfb_bundle_ui',
+          product_id: cfbCurrentProductId
+        },
+        success: function (response)
+        {
+          if ( ! response.success)
+          {
+            bodyEl.innerHTML = '<p>Chyba načítání výběru.</p>';
+            return;
+          }
+          titleEl.textContent = response.data.name;
+          // jQuery .html() vykoná inline <script> tagy (vč. cfb $(document).ready());
+          // cfb kód spravuje disabled stav addBtn (má třídu single_add_to_cart_button)
+          $(bodyEl).html(response.data.html);
+          // Ujistíme se, že tlačítko začíná disabled –
+          // cfb ho povolí teprve po dokončení validního výběru (+/-)
+          addBtn.disabled = true;
+        },
+        error: function ()
+        {
+          bodyEl.innerHTML = '<p>Chyba spojení.</p>';
+        }
+      });
+    });
+
+    // Klik na "PŘIDAT DO KOŠÍKU" uvnitř bundle modalu
+    document.getElementById('sp-cfb-bundle-add').addEventListener('click', function ()
+    {
+      if (this.disabled) return;
+      if ( ! cfbCurrentProductId || ! cfbCurrentPermalink) return;
+
+      var selectionInput = document.getElementById('cfb_flavor_selection');
+      var selectionValue = selectionInput ? selectionInput.value : '';
+
+      // Základní klientská validace: alespoň jedna položka musí být vybrána
+      if ( ! selectionValue)
+      {
+        document.getElementById('sp-cfb-bundle-msg').textContent = 'Prosím vyberte položky balíčku.';
+        return;
+      }
+
+      try
+      {
+        var selObj   = JSON.parse(selectionValue);
+        var total    = Object.values(selObj).reduce(function (s, v) { return s + (v.qty || 0); }, 0);
+        if (total === 0)
+        {
+          document.getElementById('sp-cfb-bundle-msg').textContent = 'Prosím vyberte položky balíčku.';
+          return;
+        }
+      }
+      catch (e) { /* Pokud JSON parsování selže, necháme server validovat */ }
+
+      var addBtn = this;
+      addBtn.disabled    = true;
+      addBtn.textContent = '\u2026';
+      document.getElementById('sp-cfb-bundle-msg').textContent = '';
+
+      var params = new URLSearchParams();
+      params.append('add-to-cart',           cfbCurrentProductId);
+      params.append('product_id',            cfbCurrentProductId);
+      params.append('quantity',              '1');
+      params.append('cfb_flavor_selection',  selectionValue);
+
+      $.ajax(
+      {
+        url:         cfbCurrentPermalink,
+        method:      'POST',
+        contentType: 'application/x-www-form-urlencoded',
+        data:        params.toString(),
+        success: function ()
+        {
+          // Refresh WooCommerce cart fragments
+          if (typeof SP_Archive !== 'undefined' && SP_Archive.wc_ajax_url)
+          {
+            $.ajax(
+            {
+              url:    SP_Archive.wc_ajax_url.replace('%%endpoint%%', 'get_refreshed_fragments'),
+              method: 'POST',
+              success: function (r)
+              {
+                if (r && r.fragments)
+                {
+                  $.each(r.fragments, function (key, value)
+                  {
+                    if ($(key).length) $(key).replaceWith(value);
+                  });
+                  $(document.body).trigger('wc_fragments_refreshed');
+                }
+              }
+            });
+          }
+
+          addBtn.textContent = '✓ Přidáno';
+          setTimeout(function ()
+          {
+            closeCfbBundleModal();
+            addBtn.textContent = 'PŘIDAT DO KOŠÍKU';
+            addBtn.disabled    = false;
+          }, 1500);
+        },
+        error: function ()
+        {
+          document.getElementById('sp-cfb-bundle-msg').textContent = 'Chyba při přidávání do košíku.';
+          addBtn.textContent = 'PŘIDAT DO KOŠÍKU';
+          addBtn.disabled    = false;
+        }
+      });
+    });
+
+    // ── Backdrop pro fb-modal (bundle quick-view z fixed-bundles.php) ───────
     var fbModal = document.getElementById('fb-modal');
     if (fbModal)
     {
@@ -302,6 +496,7 @@
         // Ignoruj klik na interaktivní prvky
         if (
           e.target.closest('.sp-inline-cart-btn') ||
+          e.target.closest('.sp-bundle-select-btn') ||
           e.target.closest('.sp-detail-btn')      ||
           e.target.closest('select')              ||
           e.target.closest('input')               ||

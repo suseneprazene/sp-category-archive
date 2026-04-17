@@ -15,6 +15,8 @@ class SP_Product_Archive
         add_filter( 'template_include', [ $this, 'override_category_template' ], 99 );
         add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
         add_action( 'wp_enqueue_scripts', [ $this, 'maybe_enqueue_bundle_assets' ], 20 );
+        add_action( 'wp_ajax_sp_cfb_bundle_ui',        [ $this, 'ajax_cfb_bundle_ui' ] );
+        add_action( 'wp_ajax_nopriv_sp_cfb_bundle_ui', [ $this, 'ajax_cfb_bundle_ui' ] );
     }
 
     public function override_category_template( $template )
@@ -38,14 +40,14 @@ class SP_Product_Archive
             'sp-product-archive',
             plugin_dir_url( __FILE__ ) . 'assets/style.css',
             [],
-            '1.0.2'
+            '1.1.0'
         );
 
         wp_enqueue_script(
             'sp-product-archive',
             plugin_dir_url( __FILE__ ) . 'assets/script.js',
             [ 'jquery' ],
-            '1.0.2',
+            '1.1.0',
             true
         );
 
@@ -101,6 +103,58 @@ class SP_Product_Archive
         if ( wp_style_is( 'fb-modal-styles', 'registered' ) ) {
             wp_enqueue_style( 'fb-modal-styles' );
         }
+    }
+
+    /**
+     * AJAX handler: renders the cfb bundle selector UI for a single product.
+     *
+     * The cfb plugin (bundles.php) hooks its flavor-selector HTML + inline JS/CSS
+     * into `woocommerce_before_add_to_cart_button`.  We set up the WooCommerce
+     * product context, trigger that action, and return the captured HTML.
+     * No bundle logic is re-implemented here – we fully delegate to cfb.
+     */
+    public function ajax_cfb_bundle_ui()
+    {
+        $product_id = absint( $_GET['product_id'] ?? 0 );
+
+        if ( ! $product_id ) {
+            wp_send_json_error( [ 'message' => 'Missing product_id.' ] );
+        }
+
+        if ( get_post_meta( $product_id, '_cfb_is_bundle', true ) !== '1' ) {
+            wp_send_json_error( [ 'message' => 'Not a cfb bundle product.' ] );
+        }
+
+        $wc_product = wc_get_product( $product_id );
+        if ( ! $wc_product ) {
+            wp_send_json_error( [ 'message' => 'Product not found.' ] );
+        }
+
+        // Set up the global WooCommerce product context expected by cfb's hook.
+        global $post, $product;
+        $orig_post    = $post;
+        $orig_product = $product;
+
+        $post    = get_post( $product_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride
+        $product = $wc_product;             // phpcs:ignore WordPress.WP.GlobalVariablesOverride
+        setup_postdata( $post );
+
+        ob_start();
+        do_action( 'woocommerce_before_add_to_cart_button' );
+        $html = ob_get_clean();
+
+        wp_reset_postdata();
+        $post    = $orig_post;    // phpcs:ignore WordPress.WP.GlobalVariablesOverride
+        $product = $orig_product; // phpcs:ignore WordPress.WP.GlobalVariablesOverride
+
+        if ( empty( trim( $html ) ) ) {
+            wp_send_json_error( [ 'message' => 'Bundle UI rendered empty – cfb plugin may not be active.' ] );
+        }
+
+        wp_send_json_success( [
+            'html' => $html,
+            'name' => $wc_product->get_name(),
+        ] );
     }
 }
 
