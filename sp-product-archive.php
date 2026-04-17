@@ -151,9 +151,13 @@ class SP_Product_Archive
             wp_send_json_error( [ 'message' => 'Bundle UI rendered empty – cfb plugin may not be active.' ] );
         }
 
+        $bundle_items = (array) get_post_meta( $product_id, '_cfb_bundle_items', true );
+        $required_qty = (int) array_sum( array_column( $bundle_items, 'limit' ) );
+
         wp_send_json_success( [
-            'html' => $html,
-            'name' => $wc_product->get_name(),
+            'html'         => $html,
+            'name'         => $wc_product->get_name(),
+            'required_qty' => $required_qty,
         ] );
     }
 }

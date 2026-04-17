@@ -219,14 +219,13 @@
 
     var cfbCurrentProductId  = null;
     var cfbCurrentPermalink  = null;
+    var cfbRequiredQty       = 0;
+    var cfbPollInterval      = null;
 
     /**
-     * Reads the current cfb flavor selection from the hidden input rendered by
-     * the cfb plugin and enables/disables our "PŘIDAT DO KOŠÍKU" button based on
-     * whether every category section has reached its required limit.
-     *
-     * Called with setTimeout(0) after each +/- click so cfb's synchronous
-     * updateSelection() (which writes #cfb_flavor_selection) finishes first.
+     * Porovná celkový počet vybraných kusů (z #cfb_flavor_selection JSON)
+     * s cfbRequiredQty (celkový limit ze všech sekcí, vrácený ze serveru).
+     * Povolí tlačítko jen tehdy, když je vybrán přesně požadovaný počet.
      */
     function syncCfbAddBtn()
     {
@@ -239,33 +238,18 @@
       try { sel = JSON.parse(selInput.value); }
       catch (e) { addBtn.disabled = true; return; }
 
-      var sections = document.querySelectorAll('#sp-cfb-bundle-body .cfb-category-section');
-      if ( ! sections.length) { addBtn.disabled = true; return; }
-
-      var allValid = true;
-      sections.forEach(function (section)
+      var total = Object.values(sel).reduce(function (s, v)
       {
-        var limitEl    = section.querySelector('.cfb-limit-info');
-        var limitMatch = limitEl ? (limitEl.textContent.match(/\d+/) || []) : [];
-        var limit      = limitMatch.length ? parseInt(limitMatch[0], 10) : 0;
-        if (limit < 1) return; // sekcí bez platného limitu přeskočíme
+        return s + parseInt(v.qty || 0, 10);
+      }, 0);
 
-        var catTotal = 0;
-        section.querySelectorAll('.cfb-quantity').forEach(function (input)
-        {
-          var fid = input.dataset.flavorId;
-          if (fid && sel[fid]) catTotal += parseInt(sel[fid].qty || 0, 10);
-        });
-
-        if (catTotal !== limit) allValid = false;
-      });
-
-      addBtn.disabled = ! allValid;
+      addBtn.disabled = cfbRequiredQty > 0 ? (total !== cfbRequiredQty) : (total === 0);
     }
 
     function closeCfbBundleModal()
     {
       cfbBundleModal.classList.remove('sp-cfb-bundle-open');
+      if (cfbPollInterval) { clearInterval(cfbPollInterval); cfbPollInterval = null; }
       // Skryjeme také cfb product-preview modal, pokud byl otevřen uvnitř
       var innerBg  = document.getElementById('cfbModalBg');
       var innerMod = document.getElementById('cfbModal');
@@ -329,20 +313,17 @@
             return;
           }
           titleEl.textContent = response.data.name;
-          // jQuery .html() vloží HTML (vč. cfb inline <style>/<script>)
-          // a spustí <script> tagy. cfb's $(document).ready() se v jQuery 3
-          // provede asynchronně – nespoléháme na to, že cfb najde naše tlačítko.
-          // Stav disabled spravujeme sami přes syncCfbAddBtn().
+          cfbRequiredQty      = parseInt(response.data.required_qty || 0, 10);
+
+          // jQuery .html() vloží HTML vč. cfb inline <script> tagy.
           $(bodyEl).html(response.data.html);
 
-          // Naváže sync handler na +/– tlačítka; off+on zabrání duplicitám
-          // při opakovaném otevření modalu pro jiný produkt.
-          $(bodyEl).off('click.sp-cfb').on('click.sp-cfb', '.cfb-plus, .cfb-minus', function ()
-          {
-            setTimeout(syncCfbAddBtn, 0);
-          });
+          // cfb píše do #cfb_flavor_selection přes jQuery .val() – to nativní
+          // eventy nespustí. Proto pollujeme každých 150 ms dokud je modal otevřen.
+          if (cfbPollInterval) clearInterval(cfbPollInterval);
+          cfbPollInterval = setInterval(syncCfbAddBtn, 150);
 
-          // Inicializační sync: všechna množství jsou 0 → tlačítko disabled
+          // Inicializační sync (výběr je prázdný → disabled)
           syncCfbAddBtn();
         },
         error: function ()

@@ -334,11 +334,38 @@
   min-height: 1.2em;
 }
 
-/* Bundle summary v popisu produktu */
+/* Bundle summary v popisu produktu – skrytý, rozbalí se s .open */
 .sp-cfb-bundle-summary {
+  display: none;
   font-size: 0.9rem;
   margin: 6px 0 4px;
   color: #333;
+}
+
+.sp-product-item.open .sp-cfb-bundle-summary {
+  display: block;
+}
+
+/* Quantity vstup vykreslený cfb pluginem uvnitř bundle modalu */
+#sp-cfb-bundle-body input[type="number"] {
+  display: inline-block;
+  width: 44px;
+  height: 30px;
+  text-align: center;
+  font-size: 0.9rem;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 0 2px;
+  margin: 0 2px;
+  -moz-appearance: textfield;
+  appearance: textfield;
+  vertical-align: middle;
+}
+
+#sp-cfb-bundle-body input[type="number"]::-webkit-outer-spin-button,
+#sp-cfb-bundle-body input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .sp-cfb-bundle-summary ul {
