@@ -208,7 +208,7 @@
           '<h2 id="sp-cfb-bundle-title"></h2>' +
           '<div id="sp-cfb-bundle-body"></div>' +
           '<div id="sp-cfb-bundle-footer">' +
-            '<button id="sp-cfb-bundle-add" class="custom-product-btn single_add_to_cart_button" disabled>' +
+            '<button id="sp-cfb-bundle-add" class="custom-product-btn" disabled>' +
               'PŘIDAT DO KOŠÍKU' +
             '</button>' +
           '</div>' +
@@ -219,6 +219,49 @@
 
     var cfbCurrentProductId  = null;
     var cfbCurrentPermalink  = null;
+
+    /**
+     * Reads the current cfb flavor selection from the hidden input rendered by
+     * the cfb plugin and enables/disables our "PŘIDAT DO KOŠÍKU" button based on
+     * whether every category section has reached its required limit.
+     *
+     * Called with setTimeout(0) after each +/- click so cfb's synchronous
+     * updateSelection() (which writes #cfb_flavor_selection) finishes first.
+     */
+    function syncCfbAddBtn()
+    {
+      var addBtn   = document.getElementById('sp-cfb-bundle-add');
+      var selInput = document.getElementById('cfb_flavor_selection');
+      if ( ! addBtn) return;
+      if ( ! selInput || ! selInput.value) { addBtn.disabled = true; return; }
+
+      var sel;
+      try { sel = JSON.parse(selInput.value); }
+      catch (e) { addBtn.disabled = true; return; }
+
+      var sections = document.querySelectorAll('#sp-cfb-bundle-body .cfb-category-section');
+      if ( ! sections.length) { addBtn.disabled = true; return; }
+
+      var allValid = true;
+      sections.forEach(function (section)
+      {
+        var limitEl    = section.querySelector('.cfb-limit-info');
+        var limitMatch = limitEl ? (limitEl.textContent.match(/\d+/) || []) : [];
+        var limit      = limitMatch.length ? parseInt(limitMatch[0], 10) : 0;
+        if (limit < 1) return; // sekcí bez platného limitu přeskočíme
+
+        var catTotal = 0;
+        section.querySelectorAll('.cfb-quantity').forEach(function (input)
+        {
+          var fid = input.dataset.flavorId;
+          if (fid && sel[fid]) catTotal += parseInt(sel[fid].qty || 0, 10);
+        });
+
+        if (catTotal !== limit) allValid = false;
+      });
+
+      addBtn.disabled = ! allValid;
+    }
 
     function closeCfbBundleModal()
     {
@@ -286,12 +329,21 @@
             return;
           }
           titleEl.textContent = response.data.name;
-          // jQuery .html() vykoná inline <script> tagy (vč. cfb $(document).ready());
-          // cfb kód spravuje disabled stav addBtn (má třídu single_add_to_cart_button)
+          // jQuery .html() vloží HTML (vč. cfb inline <style>/<script>)
+          // a spustí <script> tagy. cfb's $(document).ready() se v jQuery 3
+          // provede asynchronně – nespoléháme na to, že cfb najde naše tlačítko.
+          // Stav disabled spravujeme sami přes syncCfbAddBtn().
           $(bodyEl).html(response.data.html);
-          // Ujistíme se, že tlačítko začíná disabled –
-          // cfb ho povolí teprve po dokončení validního výběru (+/-)
-          addBtn.disabled = true;
+
+          // Naváže sync handler na +/– tlačítka; off+on zabrání duplicitám
+          // při opakovaném otevření modalu pro jiný produkt.
+          $(bodyEl).off('click.sp-cfb').on('click.sp-cfb', '.cfb-plus, .cfb-minus', function ()
+          {
+            setTimeout(syncCfbAddBtn, 0);
+          });
+
+          // Inicializační sync: všechna množství jsou 0 → tlačítko disabled
+          syncCfbAddBtn();
         },
         error: function ()
         {
