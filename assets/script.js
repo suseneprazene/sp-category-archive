@@ -357,11 +357,60 @@
     // sections that all share the same data-category value, CFB stops accepting
     // + clicks once the first section's limit is reached – even though other
     // sections still have capacity.
-    // This listener fires in the same capture phase, reads the selection BEFORE
-    // the click, waits 0 ms for CFB to process the click, then checks whether
-    // #cfb_flavor_selection changed. If CFB left it unchanged AND the current
-    // total is still below cfbRequiredQty we manually increment the flavor's qty,
-    // update the visible qty display, and re-sync the add button.
+    //
+    // This listener detects a blocked + click (cfb_flavor_selection unchanged),
+    // verifies the global total hasn't been reached AND the specific section
+    // containing the button still has capacity, then manually increments the
+    // flavor qty in the JSON and the per-section DOM visual counter.
+
+    /**
+     * Walks up the DOM from plusBtn to find its section container.
+     * The section container is the first ancestor (before #sp-cfb-bundle-body)
+     * that contains fewer .cfb-plus buttons than the total in the body AND
+     * contains "Limit: X" text.
+     *
+     * Returns { limit, total } where total is the sum of DOM visual counters
+     * (previousElementSibling of each .cfb-plus in the section), NOT the JSON
+     * global qty.  This correctly handles flavors shared between sections.
+     * Returns null if the section structure cannot be determined.
+     */
+    function cfbGetSectionInfoFromDom(plusBtn)
+    {
+      var bodyEl     = document.getElementById('sp-cfb-bundle-body');
+      var allButtons = bodyEl ? bodyEl.querySelectorAll('.cfb-plus[data-flavor-id]') : [];
+      if ( ! bodyEl || allButtons.length === 0) return null;
+
+      var el = plusBtn.parentElement;
+      while (el && el !== bodyEl)
+      {
+        var buttons = el.querySelectorAll('.cfb-plus[data-flavor-id]');
+        if (buttons.length > 0 && buttons.length < allButtons.length)
+        {
+          var limitMatch = el.textContent.match(/Limit:\s*(\d+)/);
+          if (limitMatch)
+          {
+            // Sum DOM visual counters (the element immediately before each +
+            // button) to get the per-section total.  Using DOM counters instead
+            // of the JSON avoids double-counting flavors shared between sections.
+            var sectionTotal = 0;
+            buttons.forEach(function (btn)
+            {
+              var qtyEl = btn.previousElementSibling;
+              if (qtyEl)
+              {
+                sectionTotal += qtyEl.tagName === 'INPUT'
+                  ? parseInt(qtyEl.value        || 0, 10)
+                  : parseInt(qtyEl.textContent  || 0, 10);
+              }
+            });
+            return { limit: parseInt(limitMatch[1], 10), total: sectionTotal };
+          }
+        }
+        el = el.parentElement;
+      }
+      return null;
+    }
+
     document.addEventListener('click', function (e)
     {
       var plusBtn = e.target.closest('.cfb-plus');
@@ -390,22 +439,45 @@
           return s + parseInt(v.qty || 0, 10);
         }, 0);
 
-        // Only override if the required total hasn't been reached yet.
+        // Only override if the required global total hasn't been reached yet.
         if (cfbRequiredQty <= 0 || total >= cfbRequiredQty) return;
 
         var flavorId = plusBtn.dataset.flavorId || plusBtn.getAttribute('data-flavor-id');
         if ( ! flavorId || sel[flavorId] === undefined) return;
 
-        // Increment the flavor qty manually.
+        // Block the override when the specific section containing this button
+        // is already full.  Uses DOM visual counters so shared flavors are
+        // counted correctly per section instance (not the JSON global qty).
+        var sectionInfo = cfbGetSectionInfoFromDom(plusBtn);
+        if (sectionInfo && sectionInfo.total >= sectionInfo.limit)
+        {
+          if (window.spCfbDebug)
+          {
+            cfbLog(
+              '🚫 Override blocked: sekce je plná (' + sectionInfo.total +
+              '/' + sectionInfo.limit + ') pro flavor ' + flavorId
+            );
+          }
+          return;
+        }
+
+        // Increment the flavor qty in cfb_flavor_selection.
         sel[flavorId].qty = parseInt(sel[flavorId].qty || 0, 10) + 1;
         selInput.value = JSON.stringify(sel);
 
-        // Update the visible qty display (the element immediately before the + button).
+        // Increment the per-section-instance DOM visual counter by +1.
+        // Do NOT set it to sel[flavorId].qty (the JSON global value) – that
+        // would show the wrong number when the same flavor appears in multiple
+        // sections.
         var qtyDisplay = plusBtn.previousElementSibling;
         if (qtyDisplay)
         {
-          if (qtyDisplay.tagName === 'INPUT') { qtyDisplay.value = sel[flavorId].qty; }
-          else { qtyDisplay.textContent = sel[flavorId].qty; }
+          var curDisplay = qtyDisplay.tagName === 'INPUT'
+            ? parseInt(qtyDisplay.value       || 0, 10)
+            : parseInt(qtyDisplay.textContent || 0, 10);
+          var newDisplay = curDisplay + 1;
+          if (qtyDisplay.tagName === 'INPUT') { qtyDisplay.value = newDisplay; }
+          else { qtyDisplay.textContent = newDisplay; }
         }
 
         if (window.spCfbDebug)
@@ -413,7 +485,10 @@
           cfbLog(
             '🔧 Manual override: CFB blocked + pro flavor ' + flavorId +
             ', manuálně inkrementováno na qty=' + sel[flavorId].qty +
-            ' (total: ' + total + '→' + (total + 1) + ' / required: ' + cfbRequiredQty + ')'
+            (sectionInfo
+              ? ' (sekce: ' + (sectionInfo.total + 1) + '/' + sectionInfo.limit + ')'
+              : ' (sekce: neznámá)') +
+            ' (global total: ' + total + '→' + (total + 1) + ' / required: ' + cfbRequiredQty + ')'
           );
         }
 
