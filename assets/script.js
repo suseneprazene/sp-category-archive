@@ -287,11 +287,14 @@
       var row      = btn.closest('[data-flavor-id]') || btn.closest('[data-flavor_id]') || btn.parentElement;
 
       // cfb nemusí mít input[type="number"] – hledáme cokoliv co drží qty (input nebo span)
-      var qtyInput = row
-        ? (row.querySelector('input[type="number"]') ||
-           row.querySelector('.cfb-qty') ||
-           row.querySelector('[class*="qty"]') ||
-           row.querySelector('[class*="count"]'))
+      // NOTE: btn.closest('[data-flavor-id]') returns the button itself (it carries that attribute),
+      // so we use btn.parentElement to search inside the actual row container instead.
+      var qtyRow   = btn.parentElement;
+      var qtyInput = qtyRow
+        ? (qtyRow.querySelector('input[type="number"]') ||
+           qtyRow.querySelector('.cfb-qty') ||
+           qtyRow.querySelector('[class*="qty"]') ||
+           qtyRow.querySelector('[class*="count"]'))
         : null;
       var qtyBefore = qtyInput ? (qtyInput.value !== undefined ? qtyInput.value : qtyInput.textContent) : '? (žádný qty element)';
 
@@ -515,17 +518,23 @@
     // ── CFB Manual minus-sync ──────────────────────────────────────────────────
     // When a flavor is added via the manual + override (above), CFB's section-
     // internal counter for that flavor stays at 0.  On a subsequent − click CFB
-    // decrements the global JSON qty but does NOT update the DOM visual counter
-    // (because its section-internal state is 0 and it won't go below 0).
-    // A second − click then also decrements JSON (double-decrement), leaving the
-    // global qty lower than the true number of items in section 1 and making it
-    // impossible to re-enable the "Add to cart" button.
+    // may:
+    //   (a) "reconcile" the gap between its internal state (0) and the DOM counter
+    //       (1 set by the override) by subtracting both the reconcile delta AND the
+    //       actual decrement in one step → double-decrement (4 → 2 instead of 4 → 3)
+    //   (b) decrement the global JSON without updating the DOM counter because its
+    //       section-internal counter was already 0.
     //
-    // This handler patches both failure modes:
-    //   Case A – DOM counter was already 0 but CFB still decremented JSON:
-    //            revert the JSON to rawBefore (false decrement).
-    //   Case B – DOM counter was > 0 but CFB did not update it (section-internal
-    //            state mismatch): manually decrement the DOM counter.
+    // This handler patches three failure modes (checked in priority order):
+    //   Case A – DOM counter was 0 → CFB should not have changed JSON at all.
+    //            Revert the JSON to rawBefore (false decrement).
+    //   Case C – CFB decremented the flavor's JSON qty by more than 1 (reconcile
+    //            + decrement in one step). Normalize to exactly −1.
+    //   Case B – DOM counter > 0 but CFB did not update it (section-internal
+    //            state mismatch). Manually decrement the DOM counter.
+    //
+    // Case C and Case B may both fire in the same event: C fixes JSON, then B
+    // (if it also detects the DOM counter unchanged) fixes the DOM.
     document.addEventListener('click', function (e)
     {
       var minusBtn = e.target.closest('.cfb-minus');
@@ -538,17 +547,18 @@
 
       var flavorId = minusBtn.dataset.flavorId || minusBtn.getAttribute('data-flavor-id');
 
-      // Locate the qty display element.  The standard CFB structure is
-      // [.cfb-minus][qty-el][.cfb-plus].  We resolve it the same way the + override
-      // does: find the sibling .cfb-plus for this flavor and take its
-      // previousElementSibling so both handlers always use the same element.
-      var parent      = minusBtn.parentElement;
-      var plusSibling = (flavorId && parent)
-        ? parent.querySelector('.cfb-plus[data-flavor-id="' + flavorId + '"]')
-        : null;
-      var qtyDisplay  = plusSibling
-        ? plusSibling.previousElementSibling
-        : minusBtn.nextElementSibling; // fallback: next sibling
+      // Locate the qty display element.  Standard CFB row structure:
+      // [.cfb-minus][qty-display][.cfb-plus]
+      // Use the direct next sibling of the minus button so we always reference
+      // the counter for THIS specific row, not a counter from a different section
+      // (parent.querySelector would find the FIRST matching element in the parent
+      // container and could return a button from another section).
+      var qtyDisplay = minusBtn.nextElementSibling;
+      if (qtyDisplay && qtyDisplay.tagName === 'BUTTON')
+      {
+        // No qty element sits between minus and plus in this row.
+        qtyDisplay = null;
+      }
 
       var displayBefore = qtyDisplay
         ? (qtyDisplay.tagName === 'INPUT'
@@ -558,16 +568,12 @@
 
       setTimeout(function ()
       {
-        if ( ! selInput || selInput.value === rawBefore) return; // JSON unchanged – nothing to do
+        var rawAfter = selInput ? selInput.value : rawBefore;
+        if (rawAfter === rawBefore) return; // JSON unchanged – nothing to do
 
-        if (qtyDisplay === null || displayBefore === null) return;
-
-        var displayAfter = qtyDisplay.tagName === 'INPUT'
-          ? parseInt(qtyDisplay.value       || 0, 10)
-          : parseInt(qtyDisplay.textContent || 0, 10);
-
-        // Case A: DOM was already 0 → CFB had nothing to remove from this section
-        // but still decremented the global JSON.  Revert.
+        // ── Case A ────────────────────────────────────────────────────────────
+        // DOM counter was 0 → this section had nothing to remove; CFB still
+        // decremented the global JSON.  Revert.
         if (displayBefore === 0)
         {
           selInput.value = rawBefore;
@@ -576,26 +582,69 @@
           if (window.spCfbDebug)
           {
             cfbLog(
-              '🔧 Minus revert: DOM counter was 0 – reverted false JSON decrement for flavor ' + flavorId
+              '🔧 Minus revert (Case A): DOM counter was 0 – reverted false JSON decrement for flavor ' + flavorId
             );
           }
           return;
         }
 
-        // Case B: DOM was > 0 but CFB did not update it (section-internal mismatch).
-        // Manually decrement the DOM counter.
-        if (displayAfter === displayBefore)
+        // ── Case C ────────────────────────────────────────────────────────────
+        // CFB decremented by more than 1 (reconcile + decrement in one step).
+        // Normalize to exactly −1.
+        if (flavorId)
         {
-          var newDisplay = displayBefore - 1;
-          if (qtyDisplay.tagName === 'INPUT') { qtyDisplay.value = newDisplay; }
-          else { qtyDisplay.textContent = newDisplay; }
-          _cfbLastRawSelection = null;
-          if (window.spCfbDebug)
+          try
           {
-            cfbLog(
-              '🔧 Minus sync: CFB did not update DOM – manually decremented ' +
-              displayBefore + '→' + newDisplay + ' for flavor ' + flavorId
-            );
+            var selB = JSON.parse(rawBefore);
+            var selA = JSON.parse(rawAfter);
+            var qtyB = parseInt(((selB[flavorId] || {}).qty) || 0, 10);
+            var qtyA = parseInt(((selA[flavorId] || {}).qty) || 0, 10);
+
+            if (qtyB - qtyA > 1)
+            {
+              selA[flavorId].qty = Math.max(0, qtyB - 1);
+              selInput.value = JSON.stringify(selA);
+              _cfbLastRawSelection = null;
+              syncCfbAddBtn();
+
+              if (window.spCfbDebug)
+              {
+                cfbLog(
+                  '🔧 Minus fix (Case C): CFB over-decremented by ' + (qtyB - qtyA) +
+                  ', normalized to -1 for flavor ' + flavorId +
+                  ' (qty: ' + qtyB + ' → ' + selA[flavorId].qty + ')'
+                );
+              }
+              // Fall through to Case B: also fix DOM if CFB left it unchanged.
+            }
+          }
+          catch (ex) { /* JSON parse error – fall through */ }
+        }
+
+        // ── Case B ────────────────────────────────────────────────────────────
+        // DOM counter > 0 but CFB did not update it (section-internal mismatch).
+        // Manually decrement the DOM counter.
+        if (qtyDisplay !== null && displayBefore !== null && displayBefore > 0)
+        {
+          var displayAfter = qtyDisplay.tagName === 'INPUT'
+            ? parseInt(qtyDisplay.value       || 0, 10)
+            : parseInt(qtyDisplay.textContent || 0, 10);
+
+          if (displayAfter === displayBefore)
+          {
+            var newDisplay = displayBefore - 1;
+            if (qtyDisplay.tagName === 'INPUT') { qtyDisplay.value = newDisplay; }
+            else { qtyDisplay.textContent = newDisplay; }
+
+            _cfbLastRawSelection = null;
+
+            if (window.spCfbDebug)
+            {
+              cfbLog(
+                '🔧 Minus sync (Case B): CFB did not update DOM – manually decremented ' +
+                displayBefore + ' → ' + newDisplay + ' for flavor ' + flavorId
+              );
+            }
           }
         }
       }, 0);
