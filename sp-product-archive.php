@@ -19,6 +19,12 @@ class SP_Product_Archive
         add_action( 'wp_ajax_nopriv_sp_cfb_bundle_ui',  [ $this, 'ajax_cfb_bundle_ui' ] );
         add_action( 'wp_ajax_sp_cfb_add_to_cart',        [ $this, 'ajax_cfb_add_to_cart' ] );
         add_action( 'wp_ajax_nopriv_sp_cfb_add_to_cart', [ $this, 'ajax_cfb_add_to_cart' ] );
+
+        // Cart + order display of CFB flavor selection.
+        // Priority 99 ensures we run after any CFB own filter on the same hook.
+        add_filter( 'woocommerce_add_cart_item_data',          [ $this, 'cfb_save_selection_to_cart_item' ], 99, 2 );
+        add_filter( 'woocommerce_get_item_data',               [ $this, 'cfb_display_selection_in_cart' ], 10, 2 );
+        add_action( 'woocommerce_checkout_create_order_line_item', [ $this, 'cfb_add_selection_to_order_meta' ], 10, 4 );
     }
 
     public function override_category_template( $template )
@@ -244,6 +250,115 @@ class SP_Product_Archive
             'fragments'     => $fragments,
             'cart_hash'     => WC()->cart->get_cart_hash(),
         ] );
+    }
+
+    /**
+     * Persist the CFB flavor selection into WooCommerce cart item data so
+     * it survives page loads and can be displayed in the cart, order views,
+     * and confirmation emails.
+     *
+     * Runs at priority 99 (after any CFB own filter) so we do not interfere
+     * with whatever CFB itself stores under its own keys.
+     *
+     * @param array $cart_item_data Existing cart item data.
+     * @param int   $product_id     Product being added.
+     * @return array
+     */
+    public function cfb_save_selection_to_cart_item( array $cart_item_data, int $product_id ): array
+    {
+        if ( empty( $_POST['cfb_flavor_selection'] ) ) {
+            return $cart_item_data;
+        }
+
+        $raw = wp_unslash( $_POST['cfb_flavor_selection'] );
+        $sel = json_decode( $raw, true );
+        if ( ! is_array( $sel ) ) {
+            return $cart_item_data;
+        }
+
+        $selected = [];
+        foreach ( $sel as $flavor_id => $data ) {
+            $qty = absint( $data['qty'] ?? 0 );
+            if ( $qty > 0 ) {
+                $selected[ absint( $flavor_id ) ] = [
+                    'name' => sanitize_text_field( $data['name'] ?? '' ),
+                    'qty'  => $qty,
+                ];
+            }
+        }
+
+        if ( ! empty( $selected ) ) {
+            $cart_item_data['sp_cfb_selection'] = $selected;
+        }
+
+        return $cart_item_data;
+    }
+
+    /**
+     * Display the saved CFB flavor selection as cart item meta on the
+     * cart / mini-cart pages.
+     *
+     * @param array $item_data Existing item data rows.
+     * @param array $cart_item Cart item array.
+     * @return array
+     */
+    public function cfb_display_selection_in_cart( array $item_data, array $cart_item ): array
+    {
+        if ( empty( $cart_item['sp_cfb_selection'] ) ) {
+            return $item_data;
+        }
+
+        $lines = [];
+        foreach ( $cart_item['sp_cfb_selection'] as $data ) {
+            if ( ! empty( $data['name'] ) ) {
+                $lines[] = esc_html( $data['qty'] . '× ' . $data['name'] );
+            }
+        }
+
+        if ( ! empty( $lines ) ) {
+            $item_data[] = [
+                'key'   => __( 'Výběr balíčku', 'sp-product-archive' ),
+                'value' => implode( '<br>', $lines ),
+                'display' => '',
+            ];
+        }
+
+        return $item_data;
+    }
+
+    /**
+     * Write each selected CFB flavor as a separate order line-item meta entry.
+     * This makes the selection visible in:
+     *  – the WooCommerce admin order detail page
+     *  – order confirmation / processing emails to the customer and admin
+     *
+     * @param \WC_Order_Item_Product $item         Order line item.
+     * @param string                 $cart_item_key Cart item key.
+     * @param array                  $cart_item     Cart item data.
+     * @param \WC_Order              $order         The order.
+     */
+    public function cfb_add_selection_to_order_meta(
+        \WC_Order_Item_Product $item,
+        string $cart_item_key,
+        array $cart_item,
+        \WC_Order $order
+    ): void {
+        if ( empty( $cart_item['sp_cfb_selection'] ) ) {
+            return;
+        }
+
+        foreach ( $cart_item['sp_cfb_selection'] as $data ) {
+            if ( empty( $data['name'] ) ) {
+                continue;
+            }
+            // Label is the flavor name; value is the quantity.
+            // display_key / display_value let themes show it cleanly.
+            $item->add_meta_data(
+                sanitize_text_field( $data['name'] ),
+                absint( $data['qty'] ) . '×',
+                false
+            );
+        }
     }
 }
 

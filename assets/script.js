@@ -366,13 +366,17 @@
     /**
      * Walks up the DOM from plusBtn to find its section container.
      * The section container is the first ancestor (before #sp-cfb-bundle-body)
-     * that contains fewer .cfb-plus buttons than the total in the body AND
-     * contains "Limit: X" text.
+     * that contains fewer .cfb-plus buttons than the total in the body.
+     * The section limit is read from a "Limit: X" text node inside that container
+     * (CFB renders e.g. "Limit: 3 balíčky" or "Limit: 1 balíček").
      *
-     * Returns { limit, total } where total is the sum of DOM visual counters
+     * Returns { limit, total, el } where total is the sum of DOM visual counters
      * (previousElementSibling of each .cfb-plus in the section), NOT the JSON
      * global qty.  This correctly handles flavors shared between sections.
-     * Returns null if the section structure cannot be determined.
+     *
+     * Returns null when the section structure cannot be determined – in that
+     * case the caller falls back to the global-total check only (conservative:
+     * override is allowed when global total < required).
      */
     function cfbGetSectionInfoFromDom(plusBtn)
     {
@@ -380,35 +384,59 @@
       var allButtons = bodyEl ? bodyEl.querySelectorAll('.cfb-plus[data-flavor-id]') : [];
       if ( ! bodyEl || allButtons.length === 0) return null;
 
+      // If ALL buttons are in one "section" (bundle has only one section),
+      // treat the whole body as the section so per-section limit still applies.
+      var singleSection = (allButtons.length > 0);
+
       var el = plusBtn.parentElement;
+      var sectionEl = null;
+
       while (el && el !== bodyEl)
       {
         var buttons = el.querySelectorAll('.cfb-plus[data-flavor-id]');
+        // Accept this ancestor as a section candidate when it contains a strict
+        // subset of all modal buttons (multi-section) OR when it is the body's
+        // immediate child (single-section fallback checked after the loop).
         if (buttons.length > 0 && buttons.length < allButtons.length)
         {
-          var limitMatch = el.textContent.match(/Limit:\s*(\d+)/);
-          if (limitMatch)
-          {
-            // Sum DOM visual counters (the element immediately before each +
-            // button) to get the per-section total.  Using DOM counters instead
-            // of the JSON avoids double-counting flavors shared between sections.
-            var sectionTotal = 0;
-            buttons.forEach(function (btn)
-            {
-              var qtyEl = btn.previousElementSibling;
-              if (qtyEl)
-              {
-                sectionTotal += qtyEl.tagName === 'INPUT'
-                  ? parseInt(qtyEl.value        || 0, 10)
-                  : parseInt(qtyEl.textContent  || 0, 10);
-              }
-            });
-            return { limit: parseInt(limitMatch[1], 10), total: sectionTotal };
-          }
+          sectionEl = el;
+          break;
         }
         el = el.parentElement;
       }
-      return null;
+
+      // Single-section bundle: use the direct child of bodyEl that contains the button.
+      if ( ! sectionEl && singleSection)
+      {
+        var walker = plusBtn.parentElement;
+        while (walker && walker.parentElement !== bodyEl)
+        {
+          walker = walker.parentElement;
+        }
+        if (walker && walker !== bodyEl) sectionEl = walker;
+      }
+
+      if ( ! sectionEl) return null;
+
+      // Read limit from any text inside the section that matches "Limit: <number>".
+      // Covers "Limit: 3 balíčky", "Limit: 1 balíček", "Limit:3" etc.
+      var limitMatch = sectionEl.textContent.match(/Limit[:\s]+(\d+)/i);
+      if ( ! limitMatch) return null;
+
+      var sectionButtons = sectionEl.querySelectorAll('.cfb-plus[data-flavor-id]');
+      var sectionTotal   = 0;
+      sectionButtons.forEach(function (btn)
+      {
+        var qtyEl = btn.previousElementSibling;
+        if (qtyEl)
+        {
+          sectionTotal += qtyEl.tagName === 'INPUT'
+            ? parseInt(qtyEl.value        || 0, 10)
+            : parseInt(qtyEl.textContent  || 0, 10);
+        }
+      });
+
+      return { limit: parseInt(limitMatch[1], 10), total: sectionTotal };
     }
 
     document.addEventListener('click', function (e)
