@@ -45,6 +45,10 @@ $products = wc_get_products([
         $is_variable = $product->is_type( 'variable' );
         $price_html  = $product->get_price_html();
 
+        // CFB bundle detection
+        $is_cfb_bundle    = ( get_post_meta( $product_id, '_cfb_is_bundle', true ) === '1' );
+        $cfb_bundle_items = $is_cfb_bundle ? (array) get_post_meta( $product_id, '_cfb_bundle_items', true ) : [];
+
         // Varianty – připravíme data pro JS
         $variations_data = [];
         if ( $is_variable )
@@ -118,12 +122,35 @@ $products = wc_get_products([
         data-permalink="<?php echo esc_url( $permalink ); ?>"
         data-type="<?php echo $is_variable ? 'variable' : 'simple'; ?>"
         data-variations="<?php echo esc_attr( wp_json_encode( $variations_data ) ); ?>"
+        data-is-cfb-bundle="<?php echo $is_cfb_bundle ? '1' : '0'; ?>"
       >
 
         <h3><?php echo esc_html( $display_name ); ?></h3>
 
         <?php if ( $short_desc ) : ?>
           <div class="sp-product-desc"><?php echo wp_kses_post( do_shortcode( $short_desc ) ); ?></div>
+        <?php endif; ?>
+
+        <?php if ( $is_cfb_bundle && ! empty( $cfb_bundle_items ) ) : ?>
+          <div class="sp-cfb-bundle-summary">
+            <strong><?php esc_html_e( 'V ceně balíčku vyberete:', 'sp-product-archive' ); ?></strong>
+            <ul>
+              <?php foreach ( $cfb_bundle_items as $bitem ) :
+                $blimit = intval( $bitem['limit'] ?? 1 );
+                $btitle = trim( $bitem['title'] ?? '' );
+                if ( $btitle === '' ) {
+                    if ( ( $bitem['type'] ?? '' ) === 'category' && ! empty( $bitem['category_id'] ) ) {
+                        $bcat   = get_term( $bitem['category_id'], 'product_cat' );
+                        $btitle = ( $bcat && ! is_wp_error( $bcat ) ) ? $bcat->name : __( 'Výběr', 'sp-product-archive' );
+                    } else {
+                        $btitle = __( 'Výběr produktů', 'sp-product-archive' );
+                    }
+                }
+              ?>
+                <li><?php echo esc_html( $blimit . '× ' . $btitle ); ?></li>
+              <?php endforeach; ?>
+            </ul>
+          </div>
         <?php endif; ?>
 
         <!-- Inline akce – desktop -->
@@ -163,13 +190,24 @@ $products = wc_get_products([
                 <?php echo $price_html; ?>
               <?php endif; ?>
             </div>
-            <input type="number" class="sp-qty sp-inline-qty" value="1" min="1" />
-            <button
-              class="sp-add-to-cart custom-product-btn sp-inline-cart-btn"
-              data-product-id="<?php echo esc_attr( $product_id ); ?>"
-            >
-              DO KOŠÍKU
-            </button>
+            <?php if ( ! $is_cfb_bundle ) : ?>
+              <input type="number" class="sp-qty sp-inline-qty" value="1" min="1" />
+            <?php endif; ?>
+            <?php if ( $is_cfb_bundle ) : ?>
+              <button
+                class="custom-product-btn sp-bundle-select-btn"
+                data-product-id="<?php echo esc_attr( $product_id ); ?>"
+              >
+                VÝBĚR PRODUKTŮ
+              </button>
+            <?php else : ?>
+              <button
+                class="sp-add-to-cart custom-product-btn sp-inline-cart-btn"
+                data-product-id="<?php echo esc_attr( $product_id ); ?>"
+              >
+                DO KOŠÍKU
+              </button>
+            <?php endif; ?>
             <a href="<?php echo esc_url( $permalink ); ?>" class="sp-detail-btn">
               ZOBRAZIT DETAIL
             </a>
@@ -214,17 +252,28 @@ $products = wc_get_products([
             </div>
           <?php endif; ?>
 
+          <?php if ( ! $is_cfb_bundle ) : ?>
           <div class="sp-qty-row">
             <input type="number" class="sp-qty" value="1" min="1" />
           </div>
+          <?php endif; ?>
 
           <div class="sp-action-row">
-            <button
-              class="sp-add-to-cart custom-product-btn"
-              data-product-id="<?php echo esc_attr( $product_id ); ?>"
-            >
-              DO KOŠÍKU
-            </button>
+            <?php if ( $is_cfb_bundle ) : ?>
+              <button
+                class="custom-product-btn sp-bundle-select-btn"
+                data-product-id="<?php echo esc_attr( $product_id ); ?>"
+              >
+                VÝBĚR PRODUKTŮ
+              </button>
+            <?php else : ?>
+              <button
+                class="sp-add-to-cart custom-product-btn"
+                data-product-id="<?php echo esc_attr( $product_id ); ?>"
+              >
+                DO KOŠÍKU
+              </button>
+            <?php endif; ?>
             <a href="<?php echo esc_url( $permalink ); ?>" class="sp-detail-btn">
               ZOBRAZIT DETAIL
             </a>
